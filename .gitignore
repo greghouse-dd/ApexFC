@@ -1,0 +1,10 @@
+ai-service/.venv/
+ai-service/.ipynb_checkpoints/
+backend/app/**/__pycache__
+backend/venv/
+backend/.env
+
+# Ignore generated ML artifacts and vector databases
+ai-service/data/vector_db/
+ai-service/data/ml/
+ai-service/models/

@@ -1,0 +1,156 @@
+get player API is giving problems
+
+football-manager/
+│
+├── backend/
+│   ├── app/
+│   │   ├── main.py        # FastAPI initialization & routing
+│   │   ├── models.py      # Database models (SQLAlchemy or SQLModel)
+│   │   ├── schemas.py     # Pydantic data validation schemas
+│   │   └── database.py    # Database connection setup
+│   └── requirements.txt
+│
+└── frontend/
+    ├── app.py             # Main Streamlit entry point
+    ├── pages/             # Multi-page layout (e.g., Scout_Dashboard.py, Team_Roster.py)
+    ├── utils.py           # Helper functions to make API requests
+    └── requirements.txt
+
+
+
+UPDATED :
+
+football-manager/
+│
+├── backend/
+│   │
+│   ├── app/
+│   │   │
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   │
+│   │   ├── database/
+│   │   │   ├── __init__.py
+│   │   │   └── database.py
+│   │   │
+│   │   ├── models/
+│   │   │   ├── __init__.py
+│   │   │   ├── player.py
+│   │   │   ├── user.py
+│   │   │   ├── squad.py
+│   │   │   ├── squad_player.py
+│   │   │   └── transfer_history.py
+│   │   │
+│   │   ├── schemas/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── user.py
+│   │   │   ├── player.py
+│   │   │   └── squad.py
+│   │   │
+│   │   ├── routers/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── players.py
+│   │   │   ├── squad.py
+│   │   │   ├── analytics.py
+│   │   │   ├── scout.py
+│   │   │   ├── tactical.py
+│   │   │   └── coach.py
+│   │   │
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── auth_service.py
+│   │   │   ├── player_service.py
+│   │   │   ├── squad_service.py
+│   │   │   ├── analytics_service.py
+│   │   │   ├── scout_service.py
+│   │   │   └── coach_service.py
+│   │   │
+│   │   ├── scripts/
+│   │   │   └── import_players.py
+│   │   │
+│   │   ├── ml/
+│   │   │   ├── value_model.pkl
+│   │   │   ├── similarity_model.pkl
+│   │   │   ├── xg_model.pkl
+│   │   │   └── ...
+│   │   │
+│   │   ├── data/
+│   │   │   ├── players.csv
+│   │   │   ├── statsbomb/
+│   │   │   ├── processed/
+│   │   │   └── ...
+│   │   │
+│   │   └── utils/
+│   │       ├── __init__.py
+│   │       ├── security.py
+│   │       ├── dependencies.py
+│   │       └── helpers.py
+│   │
+│   ├── football_manager.db
+│   ├── requirements.txt
+│   └── .venv/
+│
+├── frontend/
+│   │
+│   ├── app.py
+│   │
+│   ├── pages/
+│   │   ├── Dashboard.py
+│   │   ├── Analytics.py
+│   │   ├── Squad.py
+│   │   ├── AI_Scout.py
+│   │   ├── Tactical.py
+│   │   ├── Coach_AI.py
+│   │   └── Settings.py
+│   │
+│   ├── components/
+│   │   ├── sidebar.py
+│   │   ├── navbar.py
+│   │   ├── cards.py
+│   │   ├── charts.py
+│   │   └── player_card.py
+│   │
+│   ├── api/
+│   │   ├── auth.py
+│   │   ├── players.py
+│   │   ├── squad.py
+│   │   ├── analytics.py
+│   │   ├── scout.py
+│   │   ├── tactical.py
+│   │   └── coach.py
+│   │
+│   ├── assets/
+│   │   ├── css/
+│   │   ├── images/
+│   │   ├── icons/
+│   │   └── fonts/
+│   │
+│   ├── utils/
+│   │   ├── session.py
+│   │   ├── constants.py
+│   │   └── helpers.py
+│   │
+│   ├── requirements.txt
+│   └── .venv/
+│
+├── README.md
+├── .gitignore
+└── LICENSE
+
+
+
+
+MILESTONES: -
+
+Backend Foundation (FastAPI, SQLite, JWT, project structure)
+Authentication
+Player Search & Dataset API
+Analytics Engine
+Squad Manager
+AI Scout
+Tactical Analysis
+Coach Assistant
+Live Match Center
+Frontend polish and deployment
