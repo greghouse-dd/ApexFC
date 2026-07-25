@@ -18,7 +18,7 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "ApexFC",
-  description: "Football Analytics Platform",
+  description: "AI-Driven Football Operations & Roster Analytics Workspace",
 };
 
 export default function RootLayout({

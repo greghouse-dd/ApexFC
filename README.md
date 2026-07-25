@@ -1,13 +1,6 @@
 <!-- Improved compatibility of back to top link: See: https://github.com/othneildrew/Best-README-Template/pull/73 -->
 <a id="readme-top"></a>
 
-<!-- PROJECT SHIELDS -->
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![Unlicense License][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url]
 
 <!-- PROJECT LOGO -->
 <br />
@@ -240,18 +233,7 @@ Project Link: [https://github.com/greghouse-dd/ApexFC](https://github.com/gregho
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- MARKDOWN LINKS & IMAGES -->
-[contributors-shield]: https://img.shields.io/github/contributors/greghouse-dd/ApexFC.svg?style=for-the-badge
-[contributors-url]: https://github.com/greghouse-dd/ApexFC/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/greghouse-dd/ApexFC.svg?style=for-the-badge
-[forks-url]: https://github.com/greghouse-dd/ApexFC/network/members
-[stars-shield]: https://img.shields.io/github/stars/greghouse-dd/ApexFC.svg?style=for-the-badge
-[stars-url]: https://github.com/greghouse-dd/ApexFC/stargazers
-[issues-shield]: https://img.shields.io/github/issues/greghouse-dd/ApexFC.svg?style=for-the-badge
-[issues-url]: https://github.com/greghouse-dd/ApexFC/issues
-[license-shield]: https://img.shields.io/github/license/greghouse-dd/ApexFC.svg?style=for-the-badge
-[license-url]: https://github.com/greghouse-dd/ApexFC/blob/main/LICENSE
-[linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
-[linkedin-url]: https://linkedin.com/in/greghouse-dd
+
 [product-screenshot]: frontend/public/images/dashboard/screenshot.png
 
 [Next.js]: https://img.shields.io/badge/next.js-000000?style=for-the-badge&logo=nextdotjs&logoColor=white
