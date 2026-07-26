@@ -90,7 +90,7 @@ export default function AppSidebar() {
   const { user, logout } = useAuth();
   const [squadName, setSquadName] = useState("ApexFC");
   const [clubEmoji, setClubEmoji] = useState("⚽");
-  const [managerName, setManagerName] = useState("Asher");
+  const [managerName, setManagerName] = useState("");
 
   const getInitials = (name: string) => {
     if (!name) return "AW";
@@ -107,7 +107,7 @@ export default function AppSidebar() {
       const res = await api.get("/squads/", { params: { user_id: user.id } });
       const activeSquad = res.data?.[0];
       if (activeSquad) {
-        setSquadName(activeSquad.squad_name);
+        setSquadName(activeSquad.squad_name || "ApexFC");
       }
       if (typeof window !== "undefined") {
         const storedEmoji = localStorage.getItem("apex_club_emoji");
@@ -115,11 +115,7 @@ export default function AppSidebar() {
           setClubEmoji(storedEmoji);
         }
         const storedManager = localStorage.getItem(`apex_manager_name_${user.username}`);
-        if (storedManager) {
-          setManagerName(storedManager);
-        } else {
-          setManagerName(user.full_name || user.username || "Asher");
-        }
+        setManagerName(storedManager || user.username);
       }
     } catch (err) {
       console.error("Error loading sidebar club details:", err);

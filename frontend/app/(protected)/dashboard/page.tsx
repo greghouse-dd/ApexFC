@@ -37,7 +37,7 @@ export default function DashboardPage() {
   const [news, setNews] = useState<any[]>([]);
   const [activeNewsIdx, setActiveNewsIdx] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [managerName, setManagerName] = useState("Asher");
+  const [managerName, setManagerName] = useState("");
 
   useEffect(() => {
     if (news.length === 0) return;
@@ -50,11 +50,7 @@ export default function DashboardPage() {
   const loadManagerName = () => {
     if (typeof window !== "undefined" && user) {
       const stored = localStorage.getItem(`apex_manager_name_${user.username}`);
-      if (stored) {
-        setManagerName(stored);
-      } else {
-        setManagerName(user.full_name || user.username || "Asher");
-      }
+      setManagerName(stored || user.username);
     }
   };
 

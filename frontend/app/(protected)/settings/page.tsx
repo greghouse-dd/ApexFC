@@ -100,7 +100,7 @@ export default function SettingsPage() {
       // Auto-create squad if user has none
       if (!activeSquad) {
         const createRes = await api.post(`/squads/?user_id=${user.id}`, {
-          squad_name: "Apex FC",
+          squad_name: "ApexFC",
           formation: "4-3-3"
         });
         activeSquad = createRes.data;
@@ -112,7 +112,7 @@ export default function SettingsPage() {
       setSquad(details);
 
       // Set page state from API values
-      setSquadName(details.squad_name || "Apex FC");
+      setSquadName(details.squad_name || "ApexFC");
       setFormation(details.formation || "4-3-3");
       
       // Total budget = remaining budget + squad value
@@ -122,7 +122,7 @@ export default function SettingsPage() {
 
       // Local storage profile settings
       if (typeof window !== "undefined") {
-        setManagerName(localStorage.getItem(`apex_manager_name_${user.username}`) || user.full_name || user.username || "Asher");
+        setManagerName(localStorage.getItem(`apex_manager_name_${user.username}`) || user.username);
         setClubEmoji(localStorage.getItem("apex_club_emoji") || "⚽");
         const storedColor = localStorage.getItem("apex_color_scheme");
         if (storedColor) {

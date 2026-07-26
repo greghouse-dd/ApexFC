@@ -17,17 +17,13 @@ export default function Header({ title }: HeaderProps) {
   const { user } = useAuth();
   const pathname = usePathname();
   const [budget, setBudget] = useState<number | null>(null);
-  const [managerName, setManagerName] = useState("Asher");
-  const [squadName, setSquadName] = useState("");
+  const [managerName, setManagerName] = useState("");
+  const [squadName, setSquadName] = useState("ApexFC");
 
   const loadManagerProfile = () => {
     if (typeof window !== "undefined" && user) {
       const stored = localStorage.getItem(`apex_manager_name_${user.username}`);
-      if (stored) {
-        setManagerName(stored);
-      } else {
-        setManagerName(user.full_name || user.username || "Asher");
-      }
+      setManagerName(stored || user.username);
     }
   };
 
@@ -47,7 +43,7 @@ export default function Header({ title }: HeaderProps) {
       const activeSquad = res.data?.[0];
       if (activeSquad) {
         setBudget(activeSquad.budget);
-        setSquadName(activeSquad.squad_name);
+        setSquadName(activeSquad.squad_name || "ApexFC");
       }
     } catch (err) {
       console.error("Error fetching budget for header:", err);
