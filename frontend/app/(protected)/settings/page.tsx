@@ -122,7 +122,7 @@ export default function SettingsPage() {
 
       // Local storage profile settings
       if (typeof window !== "undefined") {
-        setManagerName(localStorage.getItem("apex_manager_name") || user.username || "Asher");
+        setManagerName(localStorage.getItem(`apex_manager_name_${user.username}`) || user.full_name || user.username || "Asher");
         setClubEmoji(localStorage.getItem("apex_club_emoji") || "⚽");
         const storedColor = localStorage.getItem("apex_color_scheme");
         if (storedColor) {
@@ -181,7 +181,7 @@ export default function SettingsPage() {
       await api.patch(`/squads/${squad.squad_id}`, { squad_name: squadName });
 
       // Save additional aesthetic items locally
-      localStorage.setItem("apex_manager_name", managerName);
+      localStorage.setItem(`apex_manager_name_${user.username}`, managerName);
       localStorage.setItem("apex_club_emoji", clubEmoji);
       localStorage.setItem("apex_color_scheme", selectedColor.name);
 

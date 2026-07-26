@@ -1,12 +1,5 @@
 import os
-import pandas as pd
-import joblib
-from sklearn.neighbors import NearestNeighbors
 from sqlalchemy.orm import Session
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.prompts import ChatPromptTemplate
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -37,6 +30,9 @@ class AIService:
 
     def _get_similarity_model(self):
         if self._similarity_df is None:
+            import pandas as pd
+            from sklearn.neighbors import NearestNeighbors
+            
             if not os.path.exists(SIMILARITY_FEATURES_PATH):
                 raise FileNotFoundError("Similarity features not found.")
             
@@ -55,6 +51,7 @@ class AIService:
 
     def _get_hidden_gems_data(self):
         if self._hidden_gems_df is None:
+            import pandas as pd
             if not os.path.exists(HIDDEN_GEMS_PATH):
                 raise FileNotFoundError("Hidden gem features not found.")
             self._hidden_gems_df = pd.read_parquet(HIDDEN_GEMS_PATH)
@@ -62,6 +59,9 @@ class AIService:
 
     def _get_vector_db(self):
         if self._vector_db is None:
+            from langchain_community.embeddings import HuggingFaceEmbeddings
+            from langchain_community.vectorstores import Chroma
+            
             embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
             self._vector_db = Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
         return self._vector_db
@@ -255,6 +255,9 @@ class AIService:
         context = "\n\n".join([doc.page_content for doc in results])
         
         try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain_core.prompts import ChatPromptTemplate
+            
             llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
             
             prompt = ChatPromptTemplate.from_messages([

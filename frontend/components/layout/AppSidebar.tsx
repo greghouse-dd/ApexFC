@@ -114,11 +114,11 @@ export default function AppSidebar() {
         if (storedEmoji) {
           setClubEmoji(storedEmoji);
         }
-        const storedManager = localStorage.getItem("apex_manager_name");
+        const storedManager = localStorage.getItem(`apex_manager_name_${user.username}`);
         if (storedManager) {
           setManagerName(storedManager);
         } else {
-          setManagerName(user.username || "Asher");
+          setManagerName(user.full_name || user.username || "Asher");
         }
       }
     } catch (err) {

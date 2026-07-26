@@ -48,12 +48,12 @@ export default function DashboardPage() {
   }, [news]);
 
   const loadManagerName = () => {
-    if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("apex_manager_name");
+    if (typeof window !== "undefined" && user) {
+      const stored = localStorage.getItem(`apex_manager_name_${user.username}`);
       if (stored) {
         setManagerName(stored);
-      } else if (user) {
-        setManagerName(user.username || "Asher");
+      } else {
+        setManagerName(user.full_name || user.username || "Asher");
       }
     }
   };

@@ -1,5 +1,4 @@
 import os
-import pandas as pd
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, or_
