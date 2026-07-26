@@ -37,7 +37,7 @@ def get_fallback_news():
     ]
 
 
-@router.get("/")
+@router.get("/football")
 def get_football_news():
     url = "https://www.skysports.com/rss/12040"
     headers = {"User-Agent": "Mozilla/5.0"}

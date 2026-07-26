@@ -117,7 +117,7 @@ export default function DashboardPage() {
 
         // 4. Fetch Football News Feed
         try {
-          const newsRes = await api.get("/news/");
+          const newsRes = await api.get("/news/football");
           setNews(newsRes.data || []);
         } catch (newsErr) {
           console.error("Error loading news feed on dashboard:", newsErr);
