@@ -777,13 +777,6 @@ export default function AnalyticsLayout() {
                 <div className="flex justify-between"><span className="text-muted-foreground font-medium">Preferred Foot</span><span className="font-semibold">{player.preferred_foot || "Right"}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground font-medium">Height</span><span className="font-semibold">{player.height_cm || 180} cm</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground font-medium">Weight</span><span className="font-semibold">{player.weight_kg || 75} kg</span></div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground font-medium">Release Clause</span>
-                  <span className="font-semibold text-emerald-500">
-                    {player.release_clause ? `€${(player.release_clause / 1000000).toFixed(1)}M` : "N/A"}
-                  </span>
-                </div>
-                <div className="flex justify-between"><span className="text-muted-foreground font-medium">Minutes Played</span><span className="font-semibold">{player.minutes || 0} mins</span></div>
               </div>
 
               <hr className="border-border" />
