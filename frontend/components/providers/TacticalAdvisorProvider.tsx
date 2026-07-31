@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect } from "react";
 import { askTacticalAdvisor } from "@/services/api";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 export interface Message {
   role: "user" | "assistant";
@@ -17,9 +18,25 @@ interface TacticalAdvisorContextType {
 const TacticalAdvisorContext = createContext<TacticalAdvisorContextType | undefined>(undefined);
 
 export function TacticalAdvisorProvider({ children }: { children: React.ReactNode }) {
+  const { user, loading: authLoading } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Clear chat history on logout
+  useEffect(() => {
+    if (!authLoading && !user && isLoaded) {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("apex_tactical_chat");
+      }
+      setMessages([
+        {
+          role: "assistant",
+          content: "Hello Coach! I am your AI Tactical Advisor. Ask me anything about football philosophy, pressing triggers, structural formations, or transitions.",
+        },
+      ]);
+    }
+  }, [user, authLoading, isLoaded]);
 
   // Load chat history from sessionStorage on mount
   useEffect(() => {
