@@ -178,12 +178,16 @@ ApexFC is packed with advanced analytics modules structured around specific view
 The AI-driven intelligence layer powering the entire recruitment workspace:
 
 *   **ML Similarity Search Engine (KNN):**
-    *   Powered by K-Nearest Neighbors (KNN) algorithms and spatial clustering.
-    *   Evaluates over 100 statistical player features to calculate similarity metrics and recommend duplicate profiles for transfer targets.
+    *   **Algorithm:** Fits a K-Nearest Neighbors (KNN) model using the Euclidean distance metric to find spatial matches.
+    *   **Feature Space:** Encodes **41 technical and physical stats** (including core attributes, crossing, finishing, composure, marking, and goalkeeping stats).
+    *   **Imputation:** Employs a position-aware filter that imputes missing statistics using the median of the player's specific position group (`Forward`, `Midfielder`, `Defender`, `Goalkeeper`).
+    *   **Scaling:** Normalizes attributes using a `StandardScaler` to prevent attributes with large ranges from skewing similarity calculations.
 *   **AI Undervalued Gems (Youth Radar):**
-    *   An Amazon/Flipkart-inspired recommendation engine displaying similar profiles ("more to buy", "trending gems").
-    *   Automatically calculates valuation gaps between current market values and AI peak predicted valuations.
-    *   Uses a Random Forest Regressor backtested to a **94.28% validation R² score** to ensure accurate forecasting.
+    *   **Valuation Predictor:** Trains a **Random Forest Regressor** pipeline on player demographics and overall skills (`age`, `overall`, `potential`, `international_reputation`, `position_group`) to predict expected fair value.
+    *   **Undervaluation Gap:** Measures transfer market inefficiency as: $\text{AI Predicted Value} - \text{Current Market Value}$.
+    *   **Gem Score (0-100):** Ranks targets using a heuristic favoring high valuation gaps, growth capacity, and a youth bonus:
+      $$\text{Raw Score} = \text{Gap (in Millions)} + (\text{Growth Potential} \times 1.5) + \max(0, 24 - \text{Age}) \times 2$$
+      The raw score is normalized to a 0–100 scale using a `MinMaxScaler`.
 *   **Tactical Bot (LLM Advisor):**
     *   A LangChain-driven chat advisor trained on positional play philosophies and transition patterns.
     *   Responds to complex tactical queries (e.g., "How to organize build-up against a high 4-4-2 press?") and generates structured coaching session drill templates.
