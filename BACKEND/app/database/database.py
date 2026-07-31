@@ -9,9 +9,11 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///football_manager.db")
 
-# Fix Heroku / Render / Supabase legacy "postgres://" prefix for SQLAlchemy 2.0
+# Convert postgres:// or postgresql:// to postgresql+pg8000:// for pure-Python driver compatibility
 if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+pg8000://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+pg8000://", 1)
 
 
 # --------------------------------------------------

@@ -15,7 +15,9 @@ def migrate():
         return
 
     if target_url.startswith("postgres://"):
-        target_url = target_url.replace("postgres://", "postgresql://", 1)
+        target_url = target_url.replace("postgres://", "postgresql+pg8000://", 1)
+    elif target_url.startswith("postgresql://"):
+        target_url = target_url.replace("postgresql://", "postgresql+pg8000://", 1)
 
     if not os.path.exists(LOCAL_SQLITE_PATH):
         print(f"ERROR: Local SQLite database not found at {LOCAL_SQLITE_PATH}")
