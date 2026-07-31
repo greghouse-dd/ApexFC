@@ -12,12 +12,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from sqlalchemy import text
 
-Base.metadata.create_all(bind=engine)
-
-# Create case-insensitive database indexes on startup to optimize analytics page queries
-with engine.begin() as conn:
-    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fifa_players_name_nocase ON fifa_players(name COLLATE NOCASE);"))
-    conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fifa_players_fullname_nocase ON fifa_players(full_name COLLATE NOCASE);"))
+try:
+    Base.metadata.create_all(bind=engine)
+    # Create case-insensitive database indexes on startup to optimize analytics page queries
+    with engine.begin() as conn:
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fifa_players_name_nocase ON fifa_players(name COLLATE NOCASE);"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fifa_players_fullname_nocase ON fifa_players(full_name COLLATE NOCASE);"))
+except Exception as e:
+    print(f"[Database Warning] Could not connect or initialize database schema: {e}")
 
 app = FastAPI(
     title="Football Manager API",
