@@ -58,8 +58,43 @@ export function TacticalAdvisorProvider({ children }: { children: React.ReactNod
     setLoading(true);
 
     try {
-      const data = await askTacticalAdvisor(query);
-      setMessages((prev) => [...prev, { role: "assistant", content: data.answer }]);
+      const response = await fetch("http://127.0.0.1:8000/ai/tactical-advisor", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ query }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to communicate with tactical advisor");
+      }
+
+      // Append empty assistant message to write streamed chunks into
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          
+          setMessages((prev) => {
+            const updated = [...prev];
+            const last = updated[updated.length - 1];
+            if (last && last.role === "assistant") {
+              updated[updated.length - 1] = {
+                ...last,
+                content: last.content + chunk,
+              };
+            }
+            return updated;
+          });
+        }
+      }
     } catch (err) {
       console.error(err);
       setMessages((prev) => [

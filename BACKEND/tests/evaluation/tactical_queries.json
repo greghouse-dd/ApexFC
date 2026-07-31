@@ -1,0 +1,55 @@
+[
+  {
+    "query": "How do wingers manipulate full-backs during an attacking transition?",
+    "query_type": "tactical_interaction",
+    "required_concepts": [
+      "Width",
+      "Attacking Transition",
+      "Blind-side run",
+      "Pinning a defender (Pinning)"
+    ],
+    "required_document_types": [
+      "tactical_pattern",
+      "team_interaction",
+      "training_drill"
+    ]
+  },
+  {
+    "query": "What is Gegenpressing?",
+    "query_type": "definition",
+    "required_concepts": [
+      "Counter-Pressing (Gegenpressing)"
+    ],
+    "required_document_types": [
+      "concept"
+    ]
+  },
+  {
+    "query": "When our high press is bypassed, how do we balance dynamic rest defense with immediate counter-pressing, specifically regarding who drops into the half-spaces vs. who commits to the ball?",
+    "query_type": "tactical_interaction",
+    "required_concepts": [
+      "High Press",
+      "Counter-Pressing (Gegenpressing)",
+      "Rest Defence",
+      "Dynamic Rest Defence"
+    ],
+    "required_document_types": [
+      "concept",
+      "tactical_pattern",
+      "team_interaction"
+    ]
+  },
+  {
+    "query": "How do we train positional play build-up from the back?",
+    "query_type": "training_drill",
+    "required_concepts": [
+      "Positional Play (Juego de Posición)",
+      "Build-Up from the Back",
+      "Positional Games"
+    ],
+    "required_document_types": [
+      "training_drill",
+      "concept"
+    ]
+  }
+]

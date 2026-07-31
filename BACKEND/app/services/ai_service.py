@@ -1,8 +1,35 @@
 import os
+import sys
+import sqlite3
+import numpy as np
+import json
+import uuid
+import time
+from typing import List, Optional, Generator
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
 
 load_dotenv()
+
+# --- Pre-load concept list once at module level ---
+_CONCEPT_KEYS_CACHE = None
+
+def _get_concept_keys():
+    """Load and cache the concept keys from rag_pipeline at module level."""
+    global _CONCEPT_KEYS_CACHE
+    if _CONCEPT_KEYS_CACHE is not None:
+        return _CONCEPT_KEYS_CACHE
+    ai_src_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "ai-service", "src", "ml")
+    if ai_src_dir not in sys.path:
+        sys.path.append(ai_src_dir)
+    try:
+        from rag_pipeline import CONCEPT_METADATA_MAP
+        _CONCEPT_KEYS_CACHE = list(CONCEPT_METADATA_MAP.keys())
+    except ImportError:
+        _CONCEPT_KEYS_CACHE = ["Width", "Depth", "Overloads", "Numerical Superiority", "Positional Superiority", "Qualitative Superiority", "Positional Play (Juego de Posición)", "Vertical Play", "Direct Play", "Build-Up from the Back", "Attacking Transition", "High Press", "Mid-Block", "Low Block", "Counter-Pressing (Gegenpressing)", "Rest Defence", "Dynamic Rest Defence", "Touchline Trap", "Trap Pressing (Pressing Traps)", "Pressing Shadows (Cover Shadows)", "False Nine", "Inverted Full-Back", "Target Man", "Deep-Lying Playmaker", "Libero", "Overlap", "Underlap", "Blind-side run", "Pinning a defender (Pinning)", "Decoy runs", "Curved pressing runs", "Third-man runs", "Build Up vs High Press", "Counter Press vs Rest Defence", "Positional Play vs Low Block", "Attacking Transition vs Rest Defence", "Pressing Drills", "Transition Drills (Transition Rondos)", "Positional Games", "Rondos", "Wave Attacks", "Manchester City", "Liverpool", "Arsenal", "Barcelona", "Bayer Leverkusen"]
+    return _CONCEPT_KEYS_CACHE
 
 from app.models.player import Player
 
@@ -16,17 +43,348 @@ SIMILARITY_FEATURES_PATH = os.path.join(ML_DATA_DIR, "similarity_features.parque
 HIDDEN_GEMS_PATH = os.path.join(ML_DATA_DIR, "hidden_gem_features.parquet")
 SIMILARITY_SCALER_PATH = os.path.join(MODELS_DIR, "similarity_scaler.pkl")
 
+# --- Logical Indices classes ---
+
+class KnowledgeBaseIndex:
+    def __init__(self, db_dir, embeddings):
+        self.embeddings = embeddings
+        self.db_dir = db_dir
+        self.db = None
+        self._load_index()
+
+    def _load_index(self):
+        from langchain_community.vectorstores import FAISS
+        if not os.path.exists(self.db_dir):
+            raise FileNotFoundError(f"Knowledge base index not found at {self.db_dir}")
+        self.db = FAISS.load_local(self.db_dir, self.embeddings, allow_dangerous_deserialization=True)
+
+    def search_dense(self, query: str, k: int = 20, metadata_filter: dict = None):
+        return self.db.similarity_search(query, k=k, filter=metadata_filter)
+
+
+class SemanticCacheIndex:
+    def __init__(self, db_dir, embeddings, threshold=0.92):
+        self.embeddings = embeddings
+        self.threshold = threshold
+        self.index_path = os.path.join(db_dir, "cache_faiss")
+        self.sqlite_path = os.path.join(db_dir, "cache_store.db")
+        self.db = None
+        self._init_sqlite()
+        self._init_faiss()
+
+    def _init_sqlite(self):
+        os.makedirs(os.path.dirname(self.sqlite_path), exist_ok=True)
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS responses (
+                id TEXT PRIMARY KEY,
+                query TEXT,
+                response TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
+
+    def _init_faiss(self):
+        from langchain_community.vectorstores import FAISS
+        if os.path.exists(self.index_path):
+            self.db = FAISS.load_local(self.index_path, self.embeddings, allow_dangerous_deserialization=True)
+        else:
+            import faiss
+            from langchain_community.docstore.in_memory import InMemoryDocstore
+            dim = len(self.embeddings.embed_query("test"))
+            index = faiss.IndexFlatL2(dim)
+            self.db = FAISS(
+                embedding_function=self.embeddings,
+                index=index,
+                docstore=InMemoryDocstore(),
+                index_to_docstore_id={}
+            )
+            self.db.save_local(self.index_path)
+
+    def check_cache(self, query: str) -> Optional[str]:
+        # Search the FAISS index for closest query
+        results = self.db.similarity_search_with_score(query, k=1)
+        if not results:
+            return None
+            
+        doc, distance = results[0]
+        # Cosine similarity for normalized vectors: 1 - d^2 / 2
+        similarity = 1.0 - (distance / 2.0)
+        
+        if similarity >= self.threshold:
+            doc_id = doc.metadata.get("doc_id")
+            if doc_id:
+                conn = sqlite3.connect(self.sqlite_path)
+                cursor = conn.cursor()
+                cursor.execute("SELECT response FROM responses WHERE id = ?", (doc_id,))
+                row = cursor.fetchone()
+                conn.close()
+                if row:
+                    print(f"[Semantic Cache] HIT! Similarity={similarity:.4f} for query: '{query}' (cached: '{doc.page_content}')")
+                    return row[0]
+        return None
+
+    def add_to_cache(self, query: str, response: str):
+        from langchain_core.documents import Document
+        doc_id = str(uuid.uuid4())
+        
+        # Save query to FAISS cache index
+        doc = Document(page_content=query, metadata={"doc_id": doc_id})
+        self.db.add_documents([doc])
+        self.db.save_local(self.index_path)
+        
+        # Save response to SQLite
+        conn = sqlite3.connect(self.sqlite_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT OR REPLACE INTO responses (id, query, response) VALUES (?, ?, ?)",
+            (doc_id, query, response)
+        )
+        conn.commit()
+        conn.close()
+        print(f"[Semantic Cache] Cached query: '{query}'")
+
+
+# --- Query Expansion & Pre-filtering Helper Functions ---
+
+SYNONYM_MAP = {
+    "counter-pressing (gegenpressing)": ["counter press", "counter pressing", "gegenpress", "gegenpressing", "klopp", "klopp style", "win ball back quickly"],
+    "tiki-taka": ["short passing", "guardiola", "possession", "tiki taka", "triangles"],
+    "catenaccio": ["deep defensive line", "libero", "sweeper", "defensive solidity"],
+    "high press": ["pressing triggers", "high line", "forcing mistakes", "pressing high"],
+    "low block": ["defensive compactness", "deep defending", "low-block"],
+    "positional play (juego de posición)": ["juego de posición", "occupying zones", "positional advantages", "numerical superiority", "passing lanes", "blocks passing lanes", "blocked passing lanes"],
+    "counter-attacking": ["direct transition", "rapid counter", "exploiting space"],
+    "direct play": ["long balls", "long passes", "route one football", "aerial forwards"],
+    "false nine": ["false striker", "dropping striker", "messi role"],
+    "build-up from the back": ["playing out from defense", "short passes by goalie", "building from back", "passing corridors"],
+    "switch of play": ["crossfield switch", "switching wings", "diagonal ball"],
+    "third-man runs": ["third man", "third-man combinations", "third-man run", "up-back-through"],
+    "build up vs high press": ["blocked passing lanes", "blocks the central passing lanes", "central passing lanes", "cutting off passing lanes"],
+    "pressing shadows (cover shadows)": ["cover shadow", "pressing shadow", "passing lanes", "block passing lanes", "blocking passing lanes", "cutting off passing lanes"],
+}
+
+def expand_query(query: str) -> str:
+    query_lower = query.lower()
+    terms_to_add = set()
+    for keyword, synonyms in SYNONYM_MAP.items():
+        if keyword in query_lower or any(syn in query_lower for syn in synonyms):
+            terms_to_add.add(keyword)
+            for syn in synonyms:
+                terms_to_add.add(syn)
+                
+    if terms_to_add:
+        expanded_query = f"{query} {' '.join(terms_to_add)}"
+        return expanded_query
+    return query
+
+def detect_metadata_filter(query: str) -> Optional[str]:
+    """Detect the primary tactical phase of a query (for logging/boosting only, NOT hard filtering)."""
+    query_lower = query.lower()
+    
+    defence_keywords = [
+        "defence", "defensive", "low block", "catenaccio", "mid-block", 
+        "high press", "pressing trigger", "pressing trap", "man-oriented", 
+        "zonal press", "compactness", "cover shadow", "libero"
+    ]
+    attack_keywords = [
+        "attack", "attacking", "tiki-taka", "tiki taka", "overload", "underload", 
+        "overlapping", "underlapping", "false nine", "target man", "playmaker", 
+        "pivot", "build-up", "building from the back", "wing-back", "juego de posicion"
+    ]
+    transition_keywords = [
+        "transition", "gegenpress", "counter-press", "second ball", "counter-attack"
+    ]
+    
+    has_transition = any(k in query_lower for k in transition_keywords)
+    has_defence = any(k in query_lower for k in defence_keywords)
+    has_attack = any(k in query_lower for k in attack_keywords)
+    
+    # Return detected phase as a soft signal (used for logging, NOT for hard FAISS filtering).
+    # Hard pre-filtering was removed because it silently excluded cross-cutting documents
+    # (e.g., case studies with phase='General') causing retrieval failures.
+    if has_transition and not has_defence and not has_attack:
+        return "Transition"
+    elif has_defence and not has_transition and not has_attack:
+        return "Defence"
+    elif has_attack and not has_transition and not has_defence:
+        return "Attack"
+        
+    return None
+
+def run_rrf(bm25_docs, dense_docs, k=60, top_n=20):
+    scores = {}
+    def get_doc_key(doc):
+        return doc.metadata.get("title", doc.page_content)
+        
+    for rank, doc in enumerate(bm25_docs, start=1):
+        key = get_doc_key(doc)
+        if key not in scores:
+            scores[key] = {"doc": doc, "score": 0.0}
+        scores[key]["score"] += 1.0 / (k + rank)
+        
+    for rank, doc in enumerate(dense_docs, start=1):
+        key = get_doc_key(doc)
+        if key not in scores:
+            scores[key] = {"doc": doc, "score": 0.0}
+        scores[key]["score"] += 1.0 / (k + rank)
+        
+    sorted_docs = sorted(scores.values(), key=lambda x: x["score"], reverse=True)
+    return [item["doc"] for item in sorted_docs[:top_n]]
+
+def run_mmr(query_emb, doc_embs, docs, top_k=8, lambda_val=0.5):
+    if not docs:
+        return []
+    
+    N = len(docs)
+    query_emb = np.array(query_emb)
+    doc_embs = np.array(doc_embs)
+    
+    query_emb = query_emb / np.linalg.norm(query_emb)
+    norms = np.linalg.norm(doc_embs, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    doc_embs = doc_embs / norms
+    
+    query_sims = np.dot(doc_embs, query_emb)
+    
+    selected_indices = []
+    unselected_indices = list(range(N))
+    
+    best_idx = int(np.argmax(query_sims))
+    selected_indices.append(best_idx)
+    unselected_indices.remove(best_idx)
+    
+    while len(selected_indices) < min(top_k, N):
+        best_mmr_score = -1.0
+        best_idx = -1
+        
+        selected_embs = doc_embs[selected_indices]
+        
+        for idx in unselected_indices:
+            emb = doc_embs[idx]
+            max_sim_to_selected = np.max(np.dot(selected_embs, emb))
+            mmr_score = lambda_val * query_sims[idx] - (1 - lambda_val) * max_sim_to_selected
+            
+            if mmr_score > best_mmr_score:
+                best_mmr_score = mmr_score
+                best_idx = idx
+                
+        if best_idx == -1:
+            break
+            
+        selected_indices.append(best_idx)
+        unselected_indices.remove(best_idx)
+        
+    return [docs[idx] for idx in selected_indices]
+
+
+TACTICAL_SYNTHESIS_PROMPT = """You are the Apex Tactical Advisor.
+Answer the user's tactical question by synthesizing the retrieved evidence.
+Do not summarize each retrieved document separately. Identify how the retrieved concepts interact and explain their tactical relationships.
+
+For tactical decision/coaching queries:
+- Identify the tactical objective.
+- Explain the available player behaviors.
+- Explain the conditions or cues that determine each behavior.
+- Describe the coaching or training method.
+- Explain the expected tactical outcome.
+- Explain any risks or limitations.
+
+For definition/comparison/general queries:
+- Definition / Key Principles.
+- Advantages and Weaknesses.
+- Related Tactical Concepts.
+
+Choose appropriate headings dynamically based on the user's intent. Do not include empty or weak sections merely to follow a fixed template.
+Use the question's terminology naturally. Do not mention "the retrieved documents," "the context," or "the knowledge base."
+
+Use the retrieved context to answer the user's query. While you must remain grounded in and supported by the retrieved concepts and principles, apply them constructively to address the user's specific scenario. Avoid stating that the database does not contain this information or giving empty/refusal disclaimers when you can logically apply the retrieved concepts (such as using third-man combinations, Positional Play spacing, rotations, wide switches, or dropping to receive) to provide a helpful tactical solution.
+
+Retrieved Context:
+{context}
+
+Coverage Limitations (if any):
+{limitations}"""
+
+
+def run_with_retry(func, *args, max_retries=3, initial_delay=1.0, **kwargs):
+    delay = initial_delay
+    for attempt in range(max_retries + 1):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            err_str = str(e)
+            is_rate_limit = any(term in err_str for term in ["429", "ResourceExhausted", "Quota exceeded", "Resource exhausted", "rate limit"])
+            if is_rate_limit and attempt < max_retries:
+                print(f"[Rate Limit] Hit 429/Quota limit on attempt {attempt+1}. Retrying in {delay:.2f} seconds...")
+                time.sleep(delay)
+                delay *= 2.0
+            else:
+                raise e
+
+def _classify_simple_query(query: str) -> Optional[dict]:
+    query_clean = query.strip().lower()
+    if query_clean.endswith("?"):
+        query_clean = query_clean[:-1].strip()
+        
+    words = query_clean.split()
+    if len(words) > 8:
+        return None
+        
+    definition_starters = ["what is", "what are", "define", "explain", "describe", "who is", "who are", "meaning of"]
+    is_def = any(query_clean.startswith(starter) for starter in definition_starters) or (len(words) <= 4)
+    
+    if is_def:
+        concepts = _get_concept_keys()
+            
+        matched_concept = None
+        for key in concepts:
+            if key.lower() in query_clean:
+                matched_concept = key
+                break
+                
+        return {
+            "query_type": "definition",
+            "subqueries": [query],
+            "required_concepts": [matched_concept] if matched_concept else [],
+            "preferred_document_types": ["concept"]
+        }
+        
+    return None
+
+
 class AIService:
     def __init__(self):
         self._similarity_df = None
         self._knn_model = None
         self._hidden_gems_df = None
-        self._vector_db = None
-        
-        # We will load these lazily to avoid slowing down API startup, 
-        # or we could load them here in __init__ if we want them ready immediately.
-        # For a robust API, loading large models globally is better done on startup event, 
-        # but for simplicity, we'll do it on first use (lazy loading).
+        self._embeddings = None
+        self._kb_index = None
+        self._cache_index = None
+        self._bm25_retriever = None
+        self._reranker = None
+        self._llm = None
+
+    def _get_llm(self):
+        """Lazy-initialized singleton for the LLM client."""
+        if self._llm is None:
+            self._llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
+        return self._llm
+
+    def warmup(self):
+        """Pre-load all models at startup to eliminate cold-start latency on the first query."""
+        print("[AIService] Warming up models...")
+        t0 = time.time()
+        self._get_embeddings()
+        self._get_kb_index()
+        self._get_bm25_retriever()
+        self._get_reranker()
+        self._get_cache_index()
+        self._get_llm()
+        elapsed = (time.time() - t0) * 1000
+        print(f"[AIService] Warmup complete in {elapsed:.0f}ms.")
 
     def _get_similarity_model(self):
         if self._similarity_df is None:
@@ -36,14 +394,10 @@ class AIService:
             if not os.path.exists(SIMILARITY_FEATURES_PATH):
                 raise FileNotFoundError("Similarity features not found.")
             
-            # Load Data
             self._similarity_df = pd.read_parquet(SIMILARITY_FEATURES_PATH)
-            
-            # Features are all columns except snapshot_id and player_id
             feature_cols = [c for c in self._similarity_df.columns if c not in ['snapshot_id', 'player_id']]
             X = self._similarity_df[feature_cols].values
             
-            # Fit KNN
             self._knn_model = NearestNeighbors(n_neighbors=20, metric='euclidean')
             self._knn_model.fit(X)
             
@@ -57,53 +411,138 @@ class AIService:
             self._hidden_gems_df = pd.read_parquet(HIDDEN_GEMS_PATH)
         return self._hidden_gems_df
 
-    def _get_vector_db(self):
-        if self._vector_db is None:
+    def _get_embeddings(self):
+        if self._embeddings is None:
             from langchain_community.embeddings import HuggingFaceEmbeddings
-            from langchain_community.vectorstores import Chroma
+            self._embeddings = HuggingFaceEmbeddings(
+                model_name="BAAI/bge-small-en-v1.5",
+                model_kwargs={"device": "cpu", "local_files_only": True}
+            )
+        return self._embeddings
+
+    def _get_kb_index(self):
+        if self._kb_index is None:
+            self._kb_index = KnowledgeBaseIndex(DB_DIR, self._get_embeddings())
+        return self._kb_index
+
+    def _get_cache_index(self):
+        if self._cache_index is None:
+            self._cache_index = SemanticCacheIndex(DB_DIR, self._get_embeddings())
+        return self._cache_index
+
+    def _get_bm25_retriever(self):
+        if self._bm25_retriever is None:
+            kb = self._get_kb_index()
+            # Fetch all documents in FAISS to feed to BM25
+            docs = list(kb.db.docstore._dict.values())
+            from langchain_community.retrievers import BM25Retriever
+            self._bm25_retriever = BM25Retriever.from_documents(docs)
+        return self._bm25_retriever
+
+    def _get_reranker(self):
+        if self._reranker is None:
+            from sentence_transformers import CrossEncoder
+            self._reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", local_files_only=True)
+        return self._reranker
+
+    def _analyze_query(self, query: str) -> dict:
+        query_clean = query.strip().lower()
+        if query_clean.endswith("?"):
+            query_clean = query_clean[:-1].strip()
             
-            embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-            self._vector_db = Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
-        return self._vector_db
+        words = query_clean.split()
+        
+        # 1. Local Rule-Based Intent Classification
+        drill_words = ["drill", "train", "exercise", "rondo", "practice", "coaching point", "session", "game", "methods for"]
+        comparison_words = ["vs", "versus", "against", "difference", "compare", "comparison", "contrast", "options"]
+        role_words = ["role", "position", "playmaker", "winger", "full-back", "striker", "libero", "goalkeeper", "defender", "midfielder", "centre-back", "keeper"]
+        interaction_words = ["how do", "how should", "what should", "should", "how to", "manipulate", "balance", "interaction", "relationship", "trigger", "transition", "do when", "does when"]
+        definition_starters = ["what is", "what are", "define", "explain", "describe", "who is", "who are", "meaning of"]
+        
+        query_type = "tactical_interaction"
+        preferred_doc_types = ["concept", "tactical_pattern"]
+        
+        if any(w in query_clean for w in drill_words):
+            query_type = "training_drill"
+            preferred_doc_types = ["training_drill", "tactical_pattern"]
+        elif any(w in query_clean for w in comparison_words):
+            query_type = "comparison"
+            preferred_doc_types = ["concept", "team_interaction"]
+        elif any(w in query_clean for w in role_words) and not any(w in query_clean for w in interaction_words):
+            query_type = "player_role"
+            preferred_doc_types = ["concept", "tactical_pattern"]
+        elif any(query_clean.startswith(starter) for starter in definition_starters) or len(words) <= 5:
+            query_type = "definition"
+            preferred_doc_types = ["concept"]
+        
+        # 2. Local Tactical Concept Matching
+        concepts = _get_concept_keys()
+            
+        required_concepts = []
+        for key in concepts:
+            key_clean = key.lower()
+            # 1. Match exact key in query
+            if key_clean in query_clean:
+                required_concepts.append(key)
+                continue
+            
+            # 2. Match via brackets decomposition (e.g. Counter-Pressing (Gegenpressing))
+            if "(" in key_clean:
+                parts = key_clean.replace("(", "").replace(")", "").split()
+                if any(p in query_clean for p in parts if len(p) > 4):
+                    required_concepts.append(key)
+                    continue
+            
+            # 3. Match via local synonym list
+            synonyms = SYNONYM_MAP.get(key_clean, [])
+            if any(syn in query_clean for syn in synonyms):
+                required_concepts.append(key)
+                
+        # 3. Formulate subqueries (local lexical decomposition)
+        subqueries = [query]
+        matched_roles = [w for w in role_words if w in query_clean]
+        if matched_roles and "transition" in query_clean:
+            subqueries.append(f"{matched_roles[0]} winger full-back transition movements")
+        if required_concepts:
+            subqueries.append(f"{required_concepts[0]} training drill and execution")
+            
+        print(f"[Query Analyzer] Local Classifier matched query: '{query}' | Intent: '{query_type}' | Concepts: {required_concepts}")
+        
+        return {
+            "query_type": query_type,
+            "subqueries": subqueries,
+            "required_concepts": required_concepts,
+            "preferred_document_types": preferred_doc_types
+        }
 
     def get_similar_players(self, db: Session, fifa_id: int, k: int = 5):
         df, knn = self._get_similarity_model()
-        
-        # Find the target player's index in the parquet file
-        # player_id maps to fifa_id
         target_row = df[df['player_id'] == fifa_id]
         if target_row.empty:
-            return None # Player not found in ML features
+            return None
             
         target_idx = target_row.index[0]
-        
         feature_cols = [c for c in df.columns if c not in ['snapshot_id', 'player_id']]
         target_features = df.iloc[target_idx][feature_cols].values.reshape(1, -1)
         
-        # Request more neighbors to filter out duplicates across versions
         fetch_k = min(k * 10, len(df))
         distances, indices = knn.kneighbors(target_features, n_neighbors=fetch_k)
         
         similar_players = []
-        seen_fifa_ids = {fifa_id} # Add target player to skip themselves
+        seen_fifa_ids = {fifa_id}
         
-        for i in range(1, len(indices[0])): # Skip index 0
+        for i in range(1, len(indices[0])):
             idx = indices[0][i]
             dist = distances[0][i]
-            
             sim_fifa_id = int(df.iloc[idx]['player_id'])
             
             if sim_fifa_id in seen_fifa_ids:
                 continue
                 
             seen_fifa_ids.add(sim_fifa_id)
-            
-            # Fetch from SQLite
             db_player = db.query(Player).filter(Player.fifa_id == sim_fifa_id).first()
             if db_player:
-                # Convert distance to a similarity score (0 to 100)
                 sim_score = max(0, 100 - (dist * 2)) 
-                
                 similar_players.append({
                     "fifa_id": db_player.fifa_id,
                     "name": db_player.name,
@@ -149,8 +588,6 @@ class AIService:
         foot: str | None = None,
     ):
         from sqlalchemy import or_
-        
-        # Check if we have active filters
         has_filters = any([
             search, league, nationality, position, min_overall, min_age, max_age,
             min_potential, min_height, min_weight, max_market_value is not None,
@@ -205,8 +642,6 @@ class AIService:
                 return []
 
         df = self._get_hidden_gems_data()
-        
-        # Sort by hidden gem score
         top_gems = df.sort_values('hidden_gem_score', ascending=False)
         
         results = []
@@ -214,16 +649,12 @@ class AIService:
         
         for _, row in top_gems.iterrows():
             sim_fifa_id = int(row['player_id'])
-            
             if sim_fifa_id in seen_fifa_ids:
                 continue
-                
             if matching_ids is not None and sim_fifa_id not in matching_ids:
                 continue
                 
             seen_fifa_ids.add(sim_fifa_id)
-            
-            # Fetch from SQLite
             db_player = db.query(Player).filter(Player.fifa_id == sim_fifa_id).first()
             if db_player:
                 results.append({
@@ -244,33 +675,204 @@ class AIService:
                 
         return results
 
-    def query_tactical_advisor(self, query: str):
-        vectordb = self._get_vector_db()
-        results = vectordb.similarity_search(query, k=3)
+    def query_tactical_advisor_stream(self, query: str) -> Generator[str, None, None]:
+        start_time = time.time()
         
-        if not results:
-            return "I couldn't find any tactical information related to that."
+        # 1. Query Expansion (Synonyms)
+        expanded_query = expand_query(query)
+        
+        # 2. Semantic Cache Check
+        cache_start = time.time()
+        cache = self._get_cache_index()
+        cached_response = cache.check_cache(query)
+        cache_time_ms = (time.time() - cache_start) * 1000
+        
+        if cached_response:
+            total_time_ms = (time.time() - start_time) * 1000
+            print(f"\n--- RAG PIPELINE PERFORMANCE METRICS ---")
+            print(f"User Query: '{query}'")
+            print(f"Cache Status: HIT")
+            print(f"Cache Lookup Time: {cache_time_ms:.2f} ms")
+            print(f"Total Execution Time: {total_time_ms:.2f} ms")
+            print(f"----------------------------------------\n")
             
-        # Combine the context of top 3 matches
-        context = "\n\n".join([doc.page_content for doc in results])
+            yield cached_response
+            return
+
+        # 3. Cache Miss - Query Understanding & Retrieval
+        retrieval_start = time.time()
         
+        # Analyze user query: classify intent and match concepts locally (1ms)
+        analysis = self._analyze_query(query)
+        query_type = analysis.get("query_type", "tactical_interaction")
+        subqueries = analysis.get("subqueries", [query])
+        required_concepts = analysis.get("required_concepts", [])
+        preferred_doc_types = analysis.get("preferred_document_types", [])
+        
+        metadata_filter = detect_metadata_filter(query)
+        
+        bm25_retriever = self._get_bm25_retriever()
+        kb_index = self._get_kb_index()
+        
+        rrf_scores = {}
+        k_val = 60
+        
+        # Perform exactly ONE dense search on the main query to save CPU embedding latency
+        dense_start = time.time()
+        dense_docs = kb_index.search_dense(expanded_query, k=20)
+        dense_time_ms = (time.time() - dense_start) * 1000
+        
+        bm25_time_ms = 0.0
+        # Perform fast lexical BM25 searches for each decomposed subquery (sub-15ms)
+        for sub_q in subqueries:
+            expanded_sub_q = expand_query(sub_q)
+            bm25_sub_start = time.time()
+            sub_bm25_docs = bm25_retriever.invoke(expanded_sub_q)[:10]
+            bm25_time_ms += (time.time() - bm25_sub_start) * 1000
+            
+            # Aggregate BM25 ranks
+            for rank, doc in enumerate(sub_bm25_docs, start=1):
+                title = doc.metadata.get("title")
+                if not title:
+                    continue
+                if title not in rrf_scores:
+                    rrf_scores[title] = {"doc": doc, "score": 0.0}
+                rrf_scores[title]["score"] += 1.0 / (k_val + rank)
+                
+        # Aggregate Dense ranks
+        for rank, doc in enumerate(dense_docs, start=1):
+            title = doc.metadata.get("title")
+            if not title:
+                continue
+            if title not in rrf_scores:
+                rrf_scores[title] = {"doc": doc, "score": 0.0}
+            rrf_scores[title]["score"] += 1.0 / (k_val + rank)
+                
+        # Sort and limit to top 20 candidates
+        fused_docs = [item["doc"] for item in sorted(rrf_scores.values(), key=lambda x: x["score"], reverse=True)][:20]
+        
+        # 4. Bypass MMR document embedding on CPU to save 11 seconds of latency
+        rrf_mmr_start = time.time()
+        diverse_docs = fused_docs
+        rrf_mmr_time_ms = (time.time() - rrf_mmr_start) * 1000
+        retrieval_time_ms = (time.time() - retrieval_start) * 1000
+        
+        # 5. Fast Reranking using ms-marco CrossEncoder
+        rerank_start = time.time()
+        decomposed_query_comb = f"{query} {' '.join(subqueries)}"
+        
+        # Rerank the top 6 candidates from the RRF list using CrossEncoder
+        rerank_docs = diverse_docs[:6]
+        if rerank_docs:
+            reranker = self._get_reranker()
+            pairs = [[decomposed_query_comb, doc.page_content] for doc in rerank_docs]
+            scores = reranker.predict(pairs)
+            scored_docs = sorted(zip(rerank_docs, scores), key=lambda x: x[1], reverse=True)
+            # Combine back with the rest of the unranked list just in case
+            top_docs = [doc for doc, score in scored_docs] + diverse_docs[6:]
+        else:
+            top_docs = diverse_docs
+            
+        rerank_time_ms = (time.time() - rerank_start) * 1000
+        
+        # Adaptive Top-K selection based on query intent classification
+        if query_type == "definition":
+            final_k = 2
+        elif query_type == "comparison":
+            final_k = 4
+        elif query_type in ["tactical_interaction", "coaching_method", "training_drill"]:
+            final_k = 5
+        else:
+            final_k = 3
+            
+        final_top_docs = top_docs[:final_k]
+        
+        # 6. Evidence Coverage Checking
+        retrieved_titles = {doc.metadata.get("title") for doc in final_top_docs}
+        retrieved_related = set()
+        for doc in final_top_docs:
+            for rc in doc.metadata.get("related_concepts", []):
+                retrieved_related.add(rc)
+                
+        missing_concepts = []
+        for req in required_concepts:
+            if req not in retrieved_titles and req not in retrieved_related:
+                # Direct check or loose substring check
+                if not any(req.lower() in t.lower() for t in retrieved_titles) and not any(req.lower() in r.lower() for r in retrieved_related):
+                    missing_concepts.append(req)
+                    
+        limitations_context = ""
+        if missing_concepts:
+            limitations_context = f"The following required tactical topics were NOT found in the retrieved database context: {', '.join(missing_concepts)}. Acknowledge this limitation naturally at the end of the response."
+
+        # Assemble Context
+        context_parts = []
+        for doc in final_top_docs:
+            context_parts.append(
+                f"### Concept: {doc.metadata.get('title')}\n"
+                f"Document Type: {doc.metadata.get('document_type')}\n"
+                f"Category: {doc.metadata.get('category')}\n"
+                f"Phase: {doc.metadata.get('phase')}\n"
+                f"Description: {doc.page_content}"
+            )
+        context = "\n\n".join(context_parts)
+        
+        # 7. LLM Call
+        llm_start = time.time()
+        llm = self._get_llm()
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", TACTICAL_SYNTHESIS_PROMPT),
+            ("human", "{query}")
+        ])
+        chain = prompt | llm
+        
+        full_response = ""
         try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.prompts import ChatPromptTemplate
+            for chunk in chain.stream({
+                "context": context, 
+                "limitations": limitations_context,
+                "query": query
+            }):
+                yield chunk.content
+                full_response += chunk.content
+                
+            llm_time_ms = (time.time() - llm_start) * 1000
+            total_time_ms = (time.time() - start_time) * 1000
             
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.7)
+            # Print performance metrics
+            print(f"\n--- RAG PIPELINE PERFORMANCE METRICS ---")
+            print(f"User Query: '{query}'")
+            print(f"Decomposed Subqueries: {subqueries}")
+            print(f"Query Classification: {query_type}")
+            print(f"Required Concepts: {required_concepts}")
+            print(f"Missing Concepts: {missing_concepts}")
+            print(f"Preferred Doc Types: {preferred_doc_types}")
+            print(f"Metadata Filter: {metadata_filter}")
+            print(f"Adaptive K Selection: {final_k}")
+            print(f"Cache Status: MISS")
+            print(f"Total Retrieval Time: {retrieval_time_ms:.2f} ms")
+            print(f"  - Dense Search Time (accumulated): {dense_time_ms:.2f} ms")
+            print(f"  - BM25 Search Time (accumulated): {bm25_time_ms:.2f} ms")
+            print(f"  - RRF & MMR Time: {rrf_mmr_time_ms:.2f} ms")
+            print(f"Reranking Time: {rerank_time_ms:.2f} ms")
+            print(f"LLM Generation Time: {llm_time_ms:.2f} ms")
+            print(f"Total Execution Time: {total_time_ms:.2f} ms")
+            print(f"Generated Tokens (est): {len(full_response) // 4}")
+            print(f"----------------------------------------\n")
             
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", "You are an elite football tactical advisor. Use the following context to answer the coach's tactical question. Be professional, clear, and analytical. Do not use outside knowledge if the answer is completely missing from the context, but you may synthesize the context naturally.\n\nContext:\n{context}"),
-                ("human", "{query}")
-            ])
-            
-            chain = prompt | llm
-            response = chain.invoke({"context": context, "query": query})
-            return response.content
-            
+            # Cache the response
+            if full_response.strip():
+                cache.add_to_cache(query, full_response)
+                
         except Exception as e:
-            # Fallback to pure RAG if API key is missing or fails
-            return f"[LLM ERROR: {str(e)}] \n\nRaw Context:\n{context}"
+            print(f"[LLM Error during stream generation]: {e}")
+            yield "\nThe Tactical Advisor is temporarily busy. Please try again in a few seconds."
+
+    def query_tactical_advisor(self, query: str) -> str:
+        # Non-streaming helper
+        chunks = []
+        for chunk in self.query_tactical_advisor_stream(query):
+            chunks.append(chunk)
+        return "".join(chunks)
 
 ai_service = AIService()

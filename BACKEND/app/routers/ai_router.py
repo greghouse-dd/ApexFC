@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -72,10 +73,10 @@ def get_hidden_gems(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/tactical-advisor", response_model=TacticalAdvisorResponse)
+@router.post("/tactical-advisor")
 def get_tactical_advice(request: TacticalAdvisorRequest):
     try:
-        answer = ai_service.query_tactical_advisor(query=request.query)
-        return {"answer": answer}
+        generator = ai_service.query_tactical_advisor_stream(query=request.query)
+        return StreamingResponse(generator, media_type="text/plain")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

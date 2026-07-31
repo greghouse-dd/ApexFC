@@ -51,11 +51,6 @@ class Squad(Base):
         onupdate=func.now()
     )
 
-    user = relationship(
-        "User",
-        back_populates="squads"
-    )
-
     # =====================================================
     # Relationships
     # =====================================================
@@ -73,12 +68,14 @@ class Squad(Base):
 
     captain = relationship(
         "Player",
-        foreign_keys=[captain_id]
+        foreign_keys=[captain_id],
+        back_populates="captain_of"
     )
 
     vice_captain = relationship(
         "Player",
-        foreign_keys=[vice_captain_id]
+        foreign_keys=[vice_captain_id],
+        back_populates="vice_captain_of"
     )
 
     transfers = relationship(

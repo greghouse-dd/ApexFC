@@ -59,3 +59,10 @@ app.include_router(transfer_router)
 app.include_router(watchlist_router)
 app.include_router(ai_router)
 app.include_router(news_router)
+
+
+@app.on_event("startup")
+def startup_warmup():
+    """Pre-load AI models at server startup to eliminate cold-start latency."""
+    from app.services.ai_service import ai_service
+    ai_service.warmup()

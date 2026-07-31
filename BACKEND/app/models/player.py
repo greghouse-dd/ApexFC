@@ -146,12 +146,14 @@ class Player(Base):
 
     captain_of = relationship(
         "Squad",
-        foreign_keys="Squad.captain_id"
+        foreign_keys="Squad.captain_id",
+        back_populates="captain"
     )
 
     vice_captain_of = relationship(
         "Squad",
-        foreign_keys="Squad.vice_captain_id"
+        foreign_keys="Squad.vice_captain_id",
+        back_populates="vice_captain"
     )
 
     transfer_history = relationship(
