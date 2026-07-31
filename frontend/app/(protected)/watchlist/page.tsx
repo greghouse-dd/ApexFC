@@ -380,14 +380,17 @@ function WatchlistContent() {
   }
 
   return (
-    <div 
-      className="flex h-full w-full overflow-hidden bg-cover bg-center bg-no-repeat relative"
-      style={{ backgroundImage: "url('/images/watchlist/watch-1.jpg')" }}
-    >
+    <>
+      {/* Full-screen background image behind sidebar and header */}
+      <div 
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat pointer-events-none z-0"
+        style={{ backgroundImage: "url('/images/watchlist/watch-1.jpg')" }}
+      />
       {/* Dark overlay for contrast and readability */}
-      <div className="absolute inset-0 bg-background/65 backdrop-blur-[1px] pointer-events-none" />
+      <div className="fixed inset-0 bg-background/65 backdrop-blur-[1px] pointer-events-none z-0" />
 
-      <div className="flex flex-1 relative z-10 h-full w-full overflow-hidden">
+      <div className="flex h-full w-full overflow-hidden relative z-10 bg-transparent">
+        <div className="flex flex-1 relative z-10 h-full w-full overflow-hidden">
       <div className="flex-grow flex flex-col p-6 space-y-6 overflow-y-auto">
         
         {/* Page Title */}
@@ -789,6 +792,7 @@ function WatchlistContent() {
       </div>
       {activeTab === "ai_gems" && <FilterSidebar />}
       </div>
-    </div>
+      </div>
+    </>
   );
 }

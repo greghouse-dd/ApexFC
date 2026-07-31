@@ -667,14 +667,16 @@ export default function AnalyticsLayout() {
   const radarData = generateRadarPoints();
 
   return (
-    <div 
-      className="min-h-screen bg-background text-foreground flex flex-col bg-cover bg-center bg-no-repeat relative"
-      style={{ backgroundImage: "url('/images/analytics/analytics-1.jpg')" }}
-    >
+    <>
+      {/* Full-screen background image behind sidebar and header */}
+      <div 
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat pointer-events-none z-0"
+        style={{ backgroundImage: "url('/images/analytics/analytics-1.jpg')" }}
+      />
       {/* Dark overlay for contrast and readability */}
-      <div className="absolute inset-0 bg-background/65 backdrop-blur-[1px] pointer-events-none" />
+      <div className="fixed inset-0 bg-background/65 backdrop-blur-[1px] pointer-events-none z-0" />
 
-      <div className="min-h-screen flex flex-col relative z-10 w-full">
+      <div className="min-h-screen text-foreground flex flex-col relative z-10 bg-transparent w-full">
         {/* Sub-header navigation (Player Stats & Compare Players) */}
         <div className="border-b border-border/40 bg-card/75 backdrop-blur-md flex w-full h-14 z-30">
         <button
@@ -1466,6 +1468,6 @@ export default function AnalyticsLayout() {
         </div>
       )}
       </div>
-    </div>
+    </>
   );
 }

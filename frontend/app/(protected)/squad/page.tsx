@@ -667,14 +667,16 @@ export default function SquadPage() {
   }
 
   return (
-    <div 
-      className="flex-1 flex flex-col xl:flex-row h-full overflow-hidden bg-cover bg-center bg-no-repeat relative"
-      style={{ backgroundImage: "url('/images/squad/squad-1.jpg')" }}
-    >
+    <>
+      {/* Full-screen background image behind sidebar and header */}
+      <div 
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat pointer-events-none z-0"
+        style={{ backgroundImage: "url('/images/squad/squad-1.jpg')" }}
+      />
       {/* Dark overlay for contrast and readability */}
-      <div className="absolute inset-0 bg-background/65 backdrop-blur-[1px] pointer-events-none" />
+      <div className="fixed inset-0 bg-background/65 backdrop-blur-[1px] pointer-events-none z-0" />
 
-      <div className="flex-1 flex flex-col xl:flex-row h-full overflow-hidden relative z-10 w-full">
+      <div className="flex-1 flex flex-col xl:flex-row h-full overflow-hidden relative z-10 bg-transparent w-full">
         {/* 1. LEFT SIDEBAR: VERTICAL FILTER CONTROL PANEL */}
         <aside className={`transition-all duration-300 ${sidebarCollapsed ? "w-0 p-0 border-r-0 border-b-0 overflow-hidden" : "w-full xl:w-80 border-b xl:border-b-0 xl:border-r border-border/40 p-5"} bg-card/75 backdrop-blur-md shrink-0 flex flex-col space-y-6 overflow-y-auto`}>
         <div className="flex items-center justify-between border-b border-border/60 pb-3 shrink-0">
@@ -1425,6 +1427,6 @@ export default function SquadPage() {
       )}
 
       </div>
-    </div>
+    </>
   );
 }

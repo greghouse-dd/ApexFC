@@ -256,14 +256,16 @@ export default function SettingsPage() {
   }
 
   return (
-    <div
-      className="min-h-[calc(100vh-64px)] bg-background text-foreground p-6 md:p-10 bg-cover bg-center bg-no-repeat relative"
-      style={{ backgroundImage: "url('/images/settings/setting-1.jpg')" }}
-    >
+    <>
+      {/* Full-screen background image behind sidebar and header */}
+      <div 
+        className="fixed inset-0 bg-cover bg-center bg-no-repeat pointer-events-none z-0"
+        style={{ backgroundImage: "url('/images/settings/setting-1.jpg')" }}
+      />
       {/* Dark overlay for contrast and readability */}
-      <div className="absolute inset-0 bg-background/65 backdrop-blur-[1px] pointer-events-none" />
+      <div className="fixed inset-0 bg-background/65 backdrop-blur-[1px] pointer-events-none z-0" />
 
-      <div className="relative z-10 w-full">
+      <div className="min-h-[calc(100vh-64px)] text-foreground p-6 md:p-10 relative z-10 bg-transparent w-full">
 
         {/* Title Header */}
         <div className="mb-8">
@@ -709,6 +711,6 @@ export default function SettingsPage() {
 
         </div>
       </div>
-    </div>
+    </>
   );
 }
