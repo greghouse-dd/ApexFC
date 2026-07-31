@@ -374,15 +374,25 @@ class AIService:
         return self._llm
 
     def warmup(self):
-        """Pre-load all models at startup to eliminate cold-start latency on the first query."""
+        """Pre-load models at startup. On Render/memory-constrained environments, only load LLM to prevent OOM."""
         print("[AIService] Warming up models...")
         t0 = time.time()
-        self._get_embeddings()
-        self._get_kb_index()
-        self._get_bm25_retriever()
-        self._get_reranker()
-        self._get_cache_index()
         self._get_llm()
+        
+        # Detect if we are on Render (Free tier memory constraints)
+        is_render = os.environ.get("RENDER") == "true"
+        if not is_render:
+            try:
+                self._get_embeddings()
+                self._get_kb_index()
+                self._get_bm25_retriever()
+                self._get_reranker()
+                self._get_cache_index()
+            except Exception as e:
+                print(f"[AIService] Non-critical error during heavy model warmup: {e}")
+        else:
+            print("[AIService] Render environment detected. Skipping heavy model warmup to prevent OOM (Out Of Memory) limits.")
+            
         elapsed = (time.time() - t0) * 1000
         print(f"[AIService] Warmup complete in {elapsed:.0f}ms.")
 
@@ -441,8 +451,16 @@ class AIService:
 
     def _get_reranker(self):
         if self._reranker is None:
-            from sentence_transformers import CrossEncoder
-            self._reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", local_files_only=True)
+            is_render = os.environ.get("RENDER") == "true"
+            if is_render:
+                print("[AIService] Reranker disabled on Render to save memory.")
+                return None
+            try:
+                from sentence_transformers import CrossEncoder
+                self._reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", local_files_only=True)
+            except Exception as e:
+                print(f"[AIService] Error loading CrossEncoder: {e}. Reranking will be bypassed.")
+                return None
         return self._reranker
 
     def _analyze_query(self, query: str) -> dict:
@@ -765,11 +783,18 @@ class AIService:
         rerank_docs = diverse_docs[:6]
         if rerank_docs:
             reranker = self._get_reranker()
-            pairs = [[decomposed_query_comb, doc.page_content] for doc in rerank_docs]
-            scores = reranker.predict(pairs)
-            scored_docs = sorted(zip(rerank_docs, scores), key=lambda x: x[1], reverse=True)
-            # Combine back with the rest of the unranked list just in case
-            top_docs = [doc for doc, score in scored_docs] + diverse_docs[6:]
+            if reranker is not None:
+                try:
+                    pairs = [[decomposed_query_comb, doc.page_content] for doc in rerank_docs]
+                    scores = reranker.predict(pairs)
+                    scored_docs = sorted(zip(rerank_docs, scores), key=lambda x: x[1], reverse=True)
+                    # Combine back with the rest of the unranked list just in case
+                    top_docs = [doc for doc, score in scored_docs] + diverse_docs[6:]
+                except Exception as e:
+                    print(f"[AIService] Error running reranker: {e}. Bypassing reranking.")
+                    top_docs = diverse_docs
+            else:
+                top_docs = diverse_docs
         else:
             top_docs = diverse_docs
             
