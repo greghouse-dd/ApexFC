@@ -53,6 +53,8 @@ export default function RegisterForm() {
         errorMsg = detail;
       } else if (Array.isArray(detail) && detail.length > 0) {
         errorMsg = detail.map((d: any) => `${d.loc?.[d.loc.length - 1] || 'Field'}: ${d.msg}`).join("; ");
+      } else if (error.message === "Network Error" || !error.response) {
+        errorMsg = "Network Error: Unable to reach backend API. Ensure NEXT_PUBLIC_API_URL is configured with HTTPS on Vercel.";
       } else if (error.message) {
         errorMsg = error.message;
       }
