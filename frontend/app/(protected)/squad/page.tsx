@@ -213,8 +213,8 @@ export default function SquadPage() {
   const [searchLoading, setSearchLoading] = useState(false);
 
   // Initialize or fetch squad
-  const fetchOrCreateSquad = async (userId: number) => {
-    setLoading(true);
+  const fetchOrCreateSquad = async (userId: number, isInitial = false) => {
+    if (isInitial) setLoading(true);
     try {
       // 1. Get user squads
       const listRes = await api.get("/squads/", { params: { user_id: userId } });
@@ -269,18 +269,18 @@ export default function SquadPage() {
           }
         })
       );
-      setPlayerDetails(profiles);
+      setPlayerDetails(prev => ({ ...prev, ...profiles }));
     } catch (err) {
       console.error("Error fetching squad details:", err);
       toast.error("Failed to load squad details.");
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   };
 
   useEffect(() => {
     if (user) {
-      fetchOrCreateSquad(user.id);
+      fetchOrCreateSquad(user.id, true);
       if (typeof window !== "undefined") {
         const storedPlaystyle = localStorage.getItem("apex_playstyle");
         if (storedPlaystyle) {
@@ -340,7 +340,6 @@ export default function SquadPage() {
   // Assign player to slot
   const assignPlayerToSlot = async (player: any) => {
     if (!squad || activeSlotIndex === null || activeSlotSubIndex === null) return;
-    setLoading(true);
     try {
       // 1. Remove any player currently occupying this slot_subIndex position
       const targetPosString = `${activeSlotIndex}_${activeSlotSubIndex}`;
@@ -358,35 +357,28 @@ export default function SquadPage() {
         position: targetPosString
       });
 
-      // 3. Clear modal and force rebuild squad
+      // 3. Clear modal and refresh squad in background
       setSearchModalOpen(false);
-      setSquad(null);
-      await fetchOrCreateSquad(user!.id);
+      await fetchOrCreateSquad(user!.id, false);
       window.dispatchEvent(new Event("squad-updated"));
       toast.success(`${player.name} added to squad!`);
     } catch (err: any) {
       console.error(err);
       toast.error(err.response?.data?.detail || "Failed to add player. Check budget (€100M max) or duplicates.");
-    } finally {
-      setLoading(false);
     }
   };
 
   // Remove player from squad
   const removePlayerFromSlot = async (playerId: number, name: string) => {
     if (!squad) return;
-    setLoading(true);
     try {
       await api.delete(`/squads/${squad.id}/players/${playerId}`);
-      setSquad(null);
-      await fetchOrCreateSquad(user!.id);
+      await fetchOrCreateSquad(user!.id, false);
       window.dispatchEvent(new Event("squad-updated"));
       toast.success(`${name} removed from lineup.`);
     } catch (err) {
       console.error(err);
       toast.error("Failed to remove player from squad.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -396,18 +388,14 @@ export default function SquadPage() {
     const confirm = window.confirm("Are you sure you want to remove all players from the squad roster? This will refund their valuations to your available budget.");
     if (!confirm) return;
 
-    setLoading(true);
     try {
       await api.delete(`/squads/${squad.id}/players`);
-      setSquad(null);
-      await fetchOrCreateSquad(user!.id);
+      await fetchOrCreateSquad(user!.id, false);
       window.dispatchEvent(new Event("squad-updated"));
       toast.success("Squad roster cleared successfully.");
     } catch (err: any) {
       console.error(err);
       toast.error(err.response?.data?.detail || "Failed to clear squad roster.");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -425,7 +413,6 @@ export default function SquadPage() {
     
     if (!subSp) return;
 
-    setLoading(true);
     try {
       if (starterSp) {
         // Swap Starter and Sub in SQLite database
@@ -456,15 +443,12 @@ export default function SquadPage() {
         toast.success(`Promoted ${subProfile?.name || "Player"} to Starter!`);
       }
 
-      setSquad(null);
-      await fetchOrCreateSquad(user!.id);
+      await fetchOrCreateSquad(user!.id, false);
       window.dispatchEvent(new Event("squad-updated"));
     } catch (err: any) {
       console.error("Error swapping players:", err);
       toast.error("Failed to swap players.");
-      fetchOrCreateSquad(user!.id);
-    } finally {
-      setLoading(false);
+      fetchOrCreateSquad(user!.id, false);
     }
   };
 
@@ -483,7 +467,6 @@ export default function SquadPage() {
 
     if (!sourceSp) return;
 
-    setLoading(true);
     try {
       const sourcePosStr = `${sourceSlotIndex}_${sourceSubIndex}`;
       const targetPosStr = `${targetSlotIndex}_${targetSubIndex}`;
@@ -518,15 +501,12 @@ export default function SquadPage() {
         toast.success(`Moved ${sourceName} to ${targetSlotLabel}!`);
       }
 
-      setSquad(null);
-      await fetchOrCreateSquad(user!.id);
+      await fetchOrCreateSquad(user!.id, false);
       window.dispatchEvent(new Event("squad-updated"));
     } catch (err: any) {
       console.error("Error swapping players:", err);
       toast.error("Failed to swap player positions.");
-      fetchOrCreateSquad(user!.id);
-    } finally {
-      setLoading(false);
+      fetchOrCreateSquad(user!.id, false);
     }
   };
 
