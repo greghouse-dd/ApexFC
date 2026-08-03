@@ -6,6 +6,7 @@ import Link from "next/link";
 import api from "@/lib/api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { DEFAULT_AVATAR } from "@/lib/utils";
+import { calculateAdvancedChemistry } from "@/lib/chemistry";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import { 
@@ -147,65 +148,14 @@ export default function DashboardPage() {
     return squad.players.filter((p: any) => p.position.indexOf("_") === -1 || p.position.endsWith("_0")).length;
   };
 
-  const getChemistry = () => {
-    if (squadProfiles.length === 0) return 0;
+  const chemistryBreakdown = (() => {
+    if (squadProfiles.length === 0) return calculateAdvancedChemistry([]);
     const starters = squadProfiles.filter(p => p.position_slot.indexOf("_") === -1 || p.position_slot.endsWith("_0"));
-    if (starters.length === 0) return 0;
+    return calculateAdvancedChemistry(starters);
+  })();
 
-    const clubCounts: Record<string, number> = {};
-    const nationCounts: Record<string, number> = {};
-    starters.forEach(p => {
-      if (p.club) clubCounts[p.club] = (clubCounts[p.club] || 0) + 1;
-      if (p.nationality) nationCounts[p.nationality] = (nationCounts[p.nationality] || 0) + 1;
-    });
-
-    let clubChem = 0;
-    Object.values(clubCounts).forEach(c => {
-      if (c >= 2) clubChem += c * 8;
-    });
-    clubChem = Math.min(40, clubChem);
-
-    let nationChem = 0;
-    Object.values(nationCounts).forEach(n => {
-      if (n >= 2) nationChem += n * 6;
-    });
-    nationChem = Math.min(40, nationChem);
-
-    let posChem = starters.length * 2;
-
-    return Math.min(100, clubChem + nationChem + posChem);
-  };
-
-  const getChemistryDescription = (score: number) => {
-    if (squadProfiles.length === 0) return "Add players to your lineup to build chemistry links.";
-    
-    const starters = squadProfiles.filter(p => p.position_slot.indexOf("_") === -1 || p.position_slot.endsWith("_0"));
-    const clubCounts: Record<string, number> = {};
-    const nationCounts: Record<string, number> = {};
-    starters.forEach(p => {
-      if (p.club) clubCounts[p.club] = (clubCounts[p.club] || 0) + 1;
-      if (p.nationality) nationCounts[p.nationality] = (nationCounts[p.nationality] || 0) + 1;
-    });
-
-    const activeLinks: string[] = [];
-    Object.entries(clubCounts).forEach(([club, count]) => {
-      if (count >= 2) activeLinks.push(club);
-    });
-    Object.entries(nationCounts).forEach(([nation, count]) => {
-      if (count >= 2) activeLinks.push(nation);
-    });
-
-    if (score >= 80) {
-      return `Masterful chemistry! (${activeLinks.slice(0, 2).join(" & ")} synergy links active)`;
-    } else if (score >= 50) {
-      return `Solid team cohesion. (${activeLinks.slice(0, 2).join(" & ") || "Base"} links active)`;
-    } else if (score > 0) {
-      return `Low chemistry. Sign players from same clubs/nations to boost synergy.`;
-    }
-    return "No active chemistry links. Roster players to begin.";
-  };
-
-  const chemistryScore = getChemistry();
+  const chemistryScore = chemistryBreakdown.overallScore;
+  const getChemistryDescription = () => chemistryBreakdown.statusMessage;
 
   if (authLoading || (user && loading)) {
     return (
@@ -438,13 +388,13 @@ export default function DashboardPage() {
 
                   {/* Right: Chemistry gauge */}
                   <div className="bg-muted/10 border border-border/60 rounded-2xl p-4 flex flex-col justify-center items-center text-center space-y-2">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Starter Team Chemistry</span>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Tactical Team Chemistry</span>
                     <span className="text-3xl font-black text-primary">{chemistryScore} / 100</span>
                     <div className="w-full max-w-[160px] bg-secondary h-2.5 rounded-full overflow-hidden border border-border/30">
-                      <div className="bg-primary h-full rounded-full transition-all duration-500 ease-out" style={{ width: `${chemistryScore}%` }}></div>
+                      <div className="bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full transition-all duration-500 ease-out" style={{ width: `${chemistryScore}%` }}></div>
                     </div>
                     <p className="text-[10px] text-muted-foreground leading-normal mt-1 max-w-[180px]">
-                      {getChemistryDescription(chemistryScore)}
+                      {getChemistryDescription()}
                     </p>
                   </div>
                 </div>

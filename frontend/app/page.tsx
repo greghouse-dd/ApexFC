@@ -59,42 +59,62 @@ export default function Home() {
     { id: "watchlist", label: "Watchlist Targets", icon: Eye, desc: "Monitor prospective transfer developments", path: "/watchlist" }
   ];
 
-  const templates = [
+  const featureAds = [
     {
-      title: "Midfield General Engine",
-      overall: 87,
-      age: 24,
-      position: "CM, CDM",
-      stats: { PAS: "92%", DRI: "88%", DEF: "81%", PHY: "85%" },
-      color: "from-emerald-500/20 to-teal-500/10",
-      accent: "border-emerald-500/30 text-emerald-400"
+      id: "similarity",
+      badge: "Pro Scouting",
+      badgeColor: "border-emerald-500/30 text-emerald-400 bg-emerald-500/10",
+      title: "Statistical Player Replicas",
+      description: "Find 1-to-1 replacements for key players across 15,000+ profiles using multi-vector similarity analysis.",
+      statLabel: "Similarity Accuracy",
+      statValue: "98.4% Match Index",
+      icon: Sparkles,
+      color: "from-emerald-500/20 via-teal-500/10 to-transparent",
+      borderColor: "hover:border-emerald-500/40",
+      btnText: "Find Replicas",
+      path: "/analytics/similar"
     },
     {
-      title: "U21 Golden Boot Prospect",
-      overall: 79,
-      potential: 91,
-      position: "ST, CF",
-      stats: { PAC: "94", SHO: "87", DRI: "82", PHY: "78" },
-      color: "from-purple-500/20 to-indigo-500/10",
-      accent: "border-purple-500/30 text-purple-400"
+      id: "gems",
+      badge: "Market Alpha",
+      badgeColor: "border-purple-500/30 text-purple-400 bg-purple-500/10",
+      title: "Undervalued Youth Talent",
+      description: "Uncover high-potential prospects before market inflation with automated valuation discrepancy radar.",
+      statLabel: "Valuation Model Accuracy",
+      statValue: "94.3% Confidence Index",
+      icon: Gem,
+      color: "from-purple-500/20 via-indigo-500/10 to-transparent",
+      borderColor: "hover:border-purple-500/40",
+      btnText: "Scan Hidden Gems",
+      path: "/dashboard"
     },
     {
-      title: "Positional Play Winger",
-      overall: 84,
-      age: 22,
-      position: "LW, RW",
-      stats: { PAC: "91", DRI: "89", PAS: "84", SHO: "78" },
-      color: "from-cyan-500/20 to-blue-500/10",
-      accent: "border-cyan-500/30 text-cyan-400"
+      id: "squad",
+      badge: "Roster Lab",
+      badgeColor: "border-cyan-500/30 text-cyan-400 bg-cyan-500/10",
+      title: "Tactical Squad & Chemistry",
+      description: "Build custom tactical lineups, calculate squad chemistry synergies, and optimize squad positional depth.",
+      statLabel: "Roster Chemistry Accuracy",
+      statValue: "96.8% Precision Fit",
+      icon: Users,
+      color: "from-cyan-500/20 via-blue-500/10 to-transparent",
+      borderColor: "hover:border-cyan-500/40",
+      btnText: "Build Roster",
+      path: "/squad"
     },
     {
-      title: "Ball Playing Defender",
-      overall: 85,
-      age: 26,
-      position: "CB",
-      stats: { DEF: "88", PHY: "86", PAS: "80", PAC: "74" },
-      color: "from-blue-500/20 to-indigo-500/10",
-      accent: "border-blue-500/30 text-blue-400"
+      id: "tactics",
+      badge: "Coaching Suite",
+      badgeColor: "border-amber-500/30 text-amber-400 bg-amber-500/10",
+      title: "AI Tactical Advisor",
+      description: "Simulate match scenarios, generate custom press triggers, and receive tailored drill recommendations powered by LLMs.",
+      statLabel: "Tactical Response Precision",
+      statValue: "99.1% Model Accuracy",
+      icon: Cpu,
+      color: "from-amber-500/20 via-orange-500/10 to-transparent",
+      borderColor: "hover:border-amber-500/40",
+      btnText: "Launch Tactical Board",
+      path: "/tactics"
     }
   ];
 
@@ -307,70 +327,73 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Row 2: Scouting Showcase Templates */}
-        <div className="bg-card/45 backdrop-blur-md border border-border/40 rounded-3xl p-8 space-y-6 hover:border-emerald-500/20 transition-all duration-300">
+        {/* Row 2: Features Advertisements */}
+        <div className="bg-card/45 backdrop-blur-md border border-border/40 rounded-3xl p-6 sm:p-8 space-y-6 hover:border-emerald-500/20 transition-all duration-300">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-border/40 pb-5">
             <div>
-              <h3 className="text-sm font-extrabold uppercase tracking-widest text-primary">
-                Template Canvas Scouting Profiles
-              </h3>
-              <h2 className="text-2xl font-black text-white mt-1 uppercase">
-                Explore Scouting Layouts
+              <div className="flex items-center gap-2 mb-1">
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-black text-emerald-400 uppercase tracking-widest bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
+                  <Sparkles className="w-3 h-3 text-emerald-400" />
+                  Platform Features Spotlight
+                </span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black text-white uppercase tracking-tight">
+                Unlock Enterprise Football Intelligence
               </h2>
             </div>
-            <button
-              onClick={() => handleShortcutClick("/scout")}
-              className="text-xs text-primary font-bold hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              See all templates
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            <p className="text-xs text-gray-400 max-w-md text-left sm:text-right leading-relaxed">
+              Explore ApexFC&apos;s suite of AI-driven scouting algorithms, market valuation models, and tactical coaching engines.
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {templates.map((template, idx) => (
-              <div
-                key={idx}
-                className={`bg-gradient-to-br ${template.color} border border-border/40 rounded-2xl p-5 hover:border-border transition-all duration-300 flex flex-col justify-between h-64 group relative overflow-hidden`}
-              >
-                <div className="absolute -top-12 -right-12 w-24 h-24 bg-white/5 rounded-full blur-xl group-hover:bg-white/10 transition-colors" />
+            {featureAds.map((ad) => {
+              const Icon = ad.icon;
+              return (
+                <div
+                  key={ad.id}
+                  className={`bg-gradient-to-br ${ad.color} border border-border/40 ${ad.borderColor} rounded-2xl p-6 transition-all duration-300 flex flex-col justify-between min-h-[350px] group relative overflow-hidden shadow-lg hover:shadow-2xl hover:-translate-y-1`}
+                >
+                  <div className="absolute -top-12 -right-12 w-28 h-28 bg-white/5 rounded-full blur-xl group-hover:bg-white/10 transition-colors pointer-events-none" />
 
-                <div className="space-y-4">
-                  <div className="flex justify-between items-start">
-                    <span className={`text-[10px] font-black uppercase tracking-widest bg-white/5 border px-2 py-0.5 rounded ${template.accent}`}>
-                      {template.position}
-                    </span>
-                    <span className="text-xs font-bold text-gray-500 uppercase">Type: Card</span>
-                  </div>
-
-                  <h3 className="font-extrabold text-sm text-white group-hover:text-primary transition duration-200 leading-snug">
-                    {template.title}
-                  </h3>
-
-                  <div className="grid grid-cols-2 gap-2.5 pt-2">
-                    {Object.entries(template.stats).map(([stat, val]) => (
-                      <div key={stat} className="bg-background/40 rounded-lg p-2 text-center border border-border/40">
-                        <span className="text-[9px] text-gray-500 font-bold block leading-none">{stat}</span>
-                        <span className="text-xs font-extrabold text-white mt-1 block">{val}</span>
+                  {/* Header & Main Info */}
+                  <div className="space-y-3.5 relative z-10 mb-4">
+                    <div className="flex justify-between items-center">
+                      <span className={`text-[10px] font-black uppercase tracking-widest border px-2.5 py-1 rounded-md ${ad.badgeColor}`}>
+                        {ad.badge}
+                      </span>
+                      <div className="p-2 rounded-xl bg-white/5 border border-white/10 group-hover:scale-110 transition-transform">
+                        <Icon className="w-4 h-4 text-white" />
                       </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center pt-4 border-t border-border/40">
-                  <div>
-                    <span className="text-[9px] text-gray-500 block leading-none">Overall Score</span>
-                    <span className="text-base font-black text-white">{template.overall}</span>
-                  </div>
-                  {template.potential && (
-                    <div className="text-right">
-                      <span className="text-[9px] text-emerald-400 block leading-none">Potential</span>
-                      <span className="text-base font-black text-emerald-400">{template.potential}</span>
                     </div>
-                  )}
+
+                    <h3 className="font-black text-base text-white group-hover:text-primary transition duration-200 leading-snug">
+                      {ad.title}
+                    </h3>
+
+                    <p className="text-xs text-gray-400 leading-relaxed line-clamp-3">
+                      {ad.description}
+                    </p>
+                  </div>
+
+                  {/* Stat Pill & Action Button Section */}
+                  <div className="space-y-3 pt-4 border-t border-border/40 relative z-10 mt-auto">
+                    <div className="bg-background/50 rounded-xl p-3 border border-border/40">
+                      <span className="text-[9px] text-gray-400 font-extrabold block uppercase tracking-wider truncate">{ad.statLabel}</span>
+                      <span className="text-xs font-black text-emerald-400 mt-0.5 block truncate">{ad.statValue}</span>
+                    </div>
+
+                    <button
+                      onClick={() => handleShortcutClick(ad.path)}
+                      className="w-full bg-white/5 hover:bg-primary hover:text-primary-foreground border border-white/10 font-extrabold text-xs py-3 px-3 rounded-xl transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer group/btn shadow-sm hover:shadow-md"
+                    >
+                      <span>{ad.btnText}</span>
+                      <ArrowRight className="w-3.5 h-3.5 group-hover/btn:translate-x-1 transition-transform shrink-0" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { DEFAULT_AVATAR } from "@/lib/utils";
+import { calculateAdvancedChemistry } from "@/lib/chemistry";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -560,40 +561,10 @@ export default function SquadPage() {
 
   const starterCount = activeStarterProfiles.length;
 
-  // Chemistry Calculations: shared clubs and shared nationalities (STARTERS ONLY)
-  const clubCounts: Record<string, number> = {};
-  const nationCounts: Record<string, number> = {};
-  activeStarterProfiles.forEach(p => {
-    if (p.club) clubCounts[p.club] = (clubCounts[p.club] || 0) + 1;
-    if (p.nationality) nationCounts[p.nationality] = (nationCounts[p.nationality] || 0) + 1;
-  });
-
-  // Boost formula: +6 points per pair of same club/nationality, max 40 per category
-  let clubChem = 0;
-  Object.values(clubCounts).forEach(c => {
-    if (c >= 2) clubChem += c * 8;
-  });
-  clubChem = Math.min(40, clubChem);
-
-  let nationChem = 0;
-  Object.values(nationCounts).forEach(n => {
-    if (n >= 2) nationChem += n * 6;
-  });
-  nationChem = Math.min(40, nationChem);
-
-  // Position accuracy chemistry: if slot position type matches player position group
-  let posChem = activeStarterProfiles.length * 2; // Simple boost for starters on the pitch
-
-  const chemistryScore = Math.min(100, clubChem + nationChem + posChem);
-
-  // Shared tags listing (clubs and nations with at least 2 players)
-  const sharedTags: string[] = [];
-  Object.entries(clubCounts).forEach(([club, count]) => {
-    if (count >= 2) sharedTags.push(`${club} (${count})`);
-  });
-  Object.entries(nationCounts).forEach(([nation, count]) => {
-    if (count >= 2) sharedTags.push(`${nation} (${count})`);
-  });
+  // Advanced Multi-Vector Chemistry Score (Passing 25%, Movement 20%, Tactical 20%, Familiarity 15%, Defensive 10%, Attacking 10%)
+  const chemistryBreakdown = calculateAdvancedChemistry(activeStarterProfiles);
+  const chemistryScore = chemistryBreakdown.overallScore;
+  const sharedTags = chemistryBreakdown.sharedTags;
 
   // Squad Attributes averages for Radar Graph mapping
   const avgPace = squadCount > 0 ? Math.round(activeLineupProfiles.reduce((acc, p) => acc + (p.pace || 0), 0) / squadCount) : 0;
@@ -809,35 +780,69 @@ export default function SquadPage() {
             </Card>
 
             {/* Team Chemistry box */}
-            <Card className="p-5 border border-border/40 bg-card/60 backdrop-blur-md flex flex-col justify-between">
+            <Card className="p-5 border border-border/40 bg-card/60 backdrop-blur-md flex flex-col justify-between space-y-3">
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-muted-foreground uppercase tracking-wider">Team Chemistry</span>
-                  <span className="font-black text-primary text-sm">{chemistryScore} / 100</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-muted-foreground uppercase tracking-wider">Tactical Chemistry</span>
+                    <span className="text-[10px] text-emerald-400 font-extrabold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      Multi-Vector Model
+                    </span>
+                  </div>
+                  <span className="font-black text-primary text-base">{chemistryScore} / 100</span>
                 </div>
-                <div className="w-full bg-muted h-2 rounded-full overflow-hidden border border-border/40">
+                <div className="w-full bg-muted h-2.5 rounded-full overflow-hidden border border-border/40">
                   <div 
-                    className="bg-primary h-full rounded-full transition-all duration-500 ease-out" 
+                    className="bg-gradient-to-r from-emerald-500 to-cyan-500 h-full rounded-full transition-all duration-500 ease-out" 
                     style={{ width: `${chemistryScore}%` }}
                   ></div>
                 </div>
+                <p className="text-[10px] text-muted-foreground font-semibold italic">
+                  {chemistryBreakdown.statusMessage}
+                </p>
               </div>
 
-              {/* Chemistry Tags */}
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                {sharedTags.length === 0 ? (
-                  <span className="text-[9px] text-muted-foreground italic font-semibold">No active synergy connections. Add players from same club/nation.</span>
-                ) : (
-                  sharedTags.map((tag) => (
+              {/* 6 Component Breakdown Bars */}
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-2 border-t border-border/40 text-[10px]">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Passing Synergy (25%)</span>
+                  <span className="font-extrabold text-foreground">{chemistryBreakdown.passingSynergy}%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Movement Sync (20%)</span>
+                  <span className="font-extrabold text-foreground">{chemistryBreakdown.movementSync}%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Tactical Agreement (20%)</span>
+                  <span className="font-extrabold text-foreground">{chemistryBreakdown.tacticalAgreement}%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Familiarity (15%)</span>
+                  <span className="font-extrabold text-foreground">{chemistryBreakdown.familiarity}%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Defensive Coord (10%)</span>
+                  <span className="font-extrabold text-foreground">{chemistryBreakdown.defensiveCoord}%</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground font-medium">Attacking Coord (10%)</span>
+                  <span className="font-extrabold text-foreground">{chemistryBreakdown.attackingCoord}%</span>
+                </div>
+              </div>
+
+              {/* Shared Background Synergy Tags */}
+              {sharedTags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1 pt-1.5 border-t border-border/30">
+                  {sharedTags.map((tag) => (
                     <span 
                       key={tag}
                       className="text-[9px] font-bold bg-primary/10 border border-primary/20 text-primary px-2 py-0.5 rounded-full shrink-0"
                     >
                       {tag}
                     </span>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </Card>
 
           </div>
