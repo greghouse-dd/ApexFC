@@ -37,25 +37,44 @@ class AuthService:
         if existing_username:
             raise ValueError("Username already taken")
 
-        # Explicitly compute next_id to guarantee primary key assignment on Postgres tables migrated via pandas to_sql
-        max_id = db.query(func.max(User.id)).scalar()
-        next_id = (max_id or 0) + 1
+        try:
+            # Explicitly compute next_id to guarantee primary key assignment on Postgres tables migrated via pandas to_sql
+            max_id = db.query(func.max(User.id)).scalar()
+            next_id = (max_id or 0) + 1
 
-        new_user = User(
-            id=next_id,
-            username=user_data.username,
-            email=user_data.email,
-            hashed_password=hash_password(user_data.password),
-            full_name=user_data.full_name,
-            favorite_club=user_data.favorite_club,
-            favorite_league=user_data.favorite_league
-        )
+            new_user = User(
+                id=next_id,
+                username=user_data.username,
+                email=user_data.email,
+                hashed_password=hash_password(user_data.password),
+                full_name=user_data.full_name,
+                favorite_club=user_data.favorite_club,
+                favorite_league=user_data.favorite_league
+            )
 
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-
-        return new_user
+            db.add(new_user)
+            db.commit()
+            db.refresh(new_user)
+            return new_user
+        except Exception as e:
+            db.rollback()
+            print(f"[Registration Fallback] Explicit ID insert failed ({e}). Retrying with auto-increment ID...")
+            try:
+                new_user = User(
+                    username=user_data.username,
+                    email=user_data.email,
+                    hashed_password=hash_password(user_data.password),
+                    full_name=user_data.full_name,
+                    favorite_club=user_data.favorite_club,
+                    favorite_league=user_data.favorite_league
+                )
+                db.add(new_user)
+                db.commit()
+                db.refresh(new_user)
+                return new_user
+            except Exception as inner_e:
+                db.rollback()
+                raise ValueError(f"Registration failed: {str(inner_e)}")
 
     @staticmethod
     def login_user(
