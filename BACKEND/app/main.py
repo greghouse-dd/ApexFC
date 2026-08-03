@@ -14,10 +14,11 @@ from sqlalchemy import text
 
 try:
     Base.metadata.create_all(bind=engine)
-    # Create case-insensitive database indexes on startup to optimize analytics page queries
-    with engine.begin() as conn:
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fifa_players_name_nocase ON fifa_players(name COLLATE NOCASE);"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fifa_players_fullname_nocase ON fifa_players(full_name COLLATE NOCASE);"))
+    # Create case-insensitive database indexes on startup to optimize analytics page queries for SQLite
+    if engine.name == "sqlite":
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fifa_players_name_nocase ON fifa_players(name COLLATE NOCASE);"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_fifa_players_fullname_nocase ON fifa_players(full_name COLLATE NOCASE);"))
 except Exception as e:
     print(f"[Database Warning] Could not connect or initialize database schema: {e}")
 

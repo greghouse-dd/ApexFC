@@ -47,12 +47,18 @@ export default function RegisterForm() {
       }, 1200);
 
     } catch (error: any) {
-      toast.error(
-        error.response?.data?.detail ??
-        "Something went wrong."
-      );
+      const detail = error.response?.data?.detail;
+      let errorMsg = "Something went wrong. Please check your credentials and try again.";
+      if (typeof detail === "string") {
+        errorMsg = detail;
+      } else if (Array.isArray(detail) && detail.length > 0) {
+        errorMsg = detail.map((d: any) => `${d.loc?.[d.loc.length - 1] || 'Field'}: ${d.msg}`).join("; ");
+      } else if (error.message) {
+        errorMsg = error.message;
+      }
 
-      console.error(error);
+      toast.error(errorMsg);
+      console.error("Registration failed:", error);
     }
   };
 

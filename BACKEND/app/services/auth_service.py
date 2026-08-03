@@ -40,7 +40,9 @@ class AuthService:
             username=user_data.username,
             email=user_data.email,
             hashed_password=hash_password(user_data.password),
-            full_name=user_data.full_name
+            full_name=user_data.full_name,
+            favorite_club=user_data.favorite_club,
+            favorite_league=user_data.favorite_league
         )
 
         db.add(new_user)

@@ -1,17 +1,17 @@
 import { z } from "zod";
 
 export const registerSchema = z.object({
-  username: z.string().min(3),
+  username: z.string().min(3, "Username must be at least 3 characters"),
 
-  email: z.email(),
+  email: z.string().email("Invalid email address"),
 
-  password: z.string().min(8),
+  password: z.string().min(8, "Password must be at least 8 characters"),
 
-  full_name: z.string(),
+  full_name: z.string().optional().or(z.literal("")),
 
-  favorite_club: z.string(),
+  favorite_club: z.string().optional().or(z.literal("")),
 
-  favorite_league: z.string(),
+  favorite_league: z.string().optional().or(z.literal("")),
 });
 
 export type RegisterSchema =

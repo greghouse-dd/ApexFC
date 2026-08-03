@@ -9,6 +9,8 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str
     full_name: str | None = None
+    favorite_club: str | None = None
+    favorite_league: str | None = None
 
 
 class UserUpdate(BaseModel):
@@ -18,15 +20,16 @@ class UserUpdate(BaseModel):
     favorite_league: str | None = None
     profile_picture: str | None = None
 
+
 class UserResponse(BaseModel):
     id: int
     username: str
     email: EmailStr
-    full_name: str | None
-    favorite_club: str | None
-    favorite_league: str | None
+    full_name: str | None = None
+    favorite_club: str | None = None
+    favorite_league: str | None = None
     profile_picture: str | None = None
-    created_at: datetime
+    created_at: datetime | None = None
 
     class Config:
         from_attributes = True
