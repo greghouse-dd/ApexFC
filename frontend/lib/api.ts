@@ -3,8 +3,11 @@ import { getToken, removeToken } from "./token";
 
 const getBaseUrl = () => {
     const envUrl = process.env.NEXT_PUBLIC_API_URL;
-    if (envUrl) {
+    if (envUrl && envUrl.trim()) {
         return envUrl.trim().replace(/\/+$/, "");
+    }
+    if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+        return "https://apexfc-backend.onrender.com";
     }
     return "http://127.0.0.1:8000";
 };

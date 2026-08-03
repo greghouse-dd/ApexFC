@@ -75,7 +75,12 @@ export function TacticalAdvisorProvider({ children }: { children: React.ReactNod
     setLoading(true);
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const envUrl = process.env.NEXT_PUBLIC_API_URL;
+      const baseUrl = (envUrl && envUrl.trim())
+        ? envUrl.trim().replace(/\/+$/, "")
+        : (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1"
+          ? "https://apexfc-backend.onrender.com"
+          : "http://127.0.0.1:8000");
       const response = await fetch(`${baseUrl}/ai/tactical-advisor`, {
         method: "POST",
         headers: {
