@@ -200,6 +200,10 @@ export default function SquadPage() {
   // Roster Stars (favorites) state
   const [starredPlayers, setStarredPlayers] = useState<Record<number, boolean>>({});
 
+  // Drag & drop state for squad re-positioning
+  const [draggedPlayer, setDraggedPlayer] = useState<{ slotIndex: number; subIndex: number; playerId: number } | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+
   // Search assignment modal state
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [activeSlotIndex, setActiveSlotIndex] = useState<number | null>(null);
@@ -458,6 +462,68 @@ export default function SquadPage() {
     } catch (err: any) {
       console.error("Error swapping players:", err);
       toast.error("Failed to swap players.");
+      fetchOrCreateSquad(user!.id);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Drag and Drop: Swap player positions across any slot indices
+  const handleSwapSlots = async (
+    sourceSlotIndex: number, 
+    sourceSubIndex: number, 
+    targetSlotIndex: number, 
+    targetSubIndex: number
+  ) => {
+    if (!squad) return;
+    if (sourceSlotIndex === targetSlotIndex && sourceSubIndex === targetSubIndex) return;
+
+    const sourceSp = findSquadPlayer(sourceSlotIndex, sourceSubIndex);
+    const targetSp = findSquadPlayer(targetSlotIndex, targetSubIndex);
+
+    if (!sourceSp) return;
+
+    setLoading(true);
+    try {
+      const sourcePosStr = `${sourceSlotIndex}_${sourceSubIndex}`;
+      const targetPosStr = `${targetSlotIndex}_${targetSubIndex}`;
+
+      if (targetSp) {
+        // Swap positions of source and target players in SQLite database
+        await api.delete(`/squads/${squad.id}/players/${sourceSp.player_id}`);
+        await api.delete(`/squads/${squad.id}/players/${targetSp.player_id}`);
+
+        await api.post(`/squads/${squad.id}/players`, {
+          player_id: sourceSp.player_id,
+          position: targetPosStr
+        });
+        await api.post(`/squads/${squad.id}/players`, {
+          player_id: targetSp.player_id,
+          position: sourcePosStr
+        });
+
+        const sourceName = playerDetails[sourceSp.player_id]?.name || "Player";
+        const targetName = playerDetails[targetSp.player_id]?.name || "Player";
+        const targetSlotLabel = FORMATION_SLOTS[formation]?.[targetSlotIndex]?.label || `Pos ${targetSlotIndex + 1}`;
+        toast.success(`Swapped ${sourceName} into ${targetSlotLabel} with ${targetName}!`);
+      } else {
+        // Move source player to empty target position
+        await api.delete(`/squads/${squad.id}/players/${sourceSp.player_id}`);
+        await api.post(`/squads/${squad.id}/players`, {
+          player_id: sourceSp.player_id,
+          position: targetPosStr
+        });
+        const sourceName = playerDetails[sourceSp.player_id]?.name || "Player";
+        const targetSlotLabel = FORMATION_SLOTS[formation]?.[targetSlotIndex]?.label || `Pos ${targetSlotIndex + 1}`;
+        toast.success(`Moved ${sourceName} to ${targetSlotLabel}!`);
+      }
+
+      setSquad(null);
+      await fetchOrCreateSquad(user!.id);
+      window.dispatchEvent(new Event("squad-updated"));
+    } catch (err: any) {
+      console.error("Error swapping players:", err);
+      toast.error("Failed to swap player positions.");
       fetchOrCreateSquad(user!.id);
     } finally {
       setLoading(false);
@@ -1010,7 +1076,12 @@ export default function SquadPage() {
               <span className="text-base">🏟️</span>
               <h3 className="text-sm font-extrabold uppercase tracking-wider text-foreground">Lineup Editor (3D Pitch View)</h3>
             </div>
-            <span className="text-[10px] font-bold text-muted-foreground bg-muted p-1 rounded uppercase tracking-wider">Own goal perspective</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-extrabold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md uppercase tracking-wider hidden sm:inline-block">
+                Drag & Drop cards to swap positions
+              </span>
+              <span className="text-[10px] font-bold text-muted-foreground bg-muted p-1 rounded uppercase tracking-wider">Own goal perspective</span>
+            </div>
           </div>
 
           <div className="relative w-full max-w-[620px] mx-auto min-h-[460px] md:min-h-[500px] border border-border/50 rounded-2xl overflow-hidden shadow-2xl flex items-center justify-center p-4 bg-[#14231b] select-none">
@@ -1051,17 +1122,48 @@ export default function SquadPage() {
             <div className="absolute inset-0 pt-4 pb-12 px-8 flex items-center justify-center">
               <div className="relative w-full h-full max-w-[560px]">
                 {FORMATION_SLOTS[formation]?.map((slot, index) => {
+                  const subIdx = 0;
+                  const targetKey = `${index}_${subIdx}`;
+                  const isDragOver = dragOverTarget === targetKey;
+
                   return (
                     <div
                       key={index}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-500 ease-out z-10 flex flex-col items-center gap-1"
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out z-10 flex flex-col items-center gap-1 ${
+                        isDragOver ? "scale-125 z-40" : ""
+                      }`}
                       style={{
                         top: slot.top,
                         left: slot.left
                       }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = "move";
+                        if (dragOverTarget !== targetKey) {
+                          setDragOverTarget(targetKey);
+                        }
+                      }}
+                      onDragLeave={() => {
+                        if (dragOverTarget === targetKey) {
+                          setDragOverTarget(null);
+                        }
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setDragOverTarget(null);
+                        const rawData = e.dataTransfer.getData("application/json") || e.dataTransfer.getData("text/plain");
+                        if (!rawData) return;
+                        try {
+                          const data = JSON.parse(rawData);
+                          if (data && typeof data.slotIndex === "number" && typeof data.subIndex === "number") {
+                            handleSwapSlots(data.slotIndex, data.subIndex, index, subIdx);
+                          }
+                        } catch (err) {
+                          console.error("Invalid drag drop data", err);
+                        }
+                      }}
                     >
                       {(() => {
-                        const subIdx = 0;
                         const assignedSp = findSquadPlayer(index, subIdx);
                         const profile = assignedSp ? playerDetails[assignedSp.player_id] : null;
 
@@ -1069,7 +1171,22 @@ export default function SquadPage() {
                           return (
                             <div 
                               key={subIdx}
-                              className="flex items-center gap-1 bg-background/95 border border-border/80 rounded-full pl-1 pr-2.5 py-0.5 shadow-lg group/sub cursor-pointer relative"
+                              draggable
+                              onDragStart={(e) => {
+                                const dragData = JSON.stringify({ slotIndex: index, subIndex: subIdx, playerId: profile.id });
+                                e.dataTransfer.setData("application/json", dragData);
+                                e.dataTransfer.setData("text/plain", dragData);
+                                setDraggedPlayer({ slotIndex: index, subIndex: subIdx, playerId: profile.id });
+                              }}
+                              onDragEnd={() => {
+                                setDraggedPlayer(null);
+                                setDragOverTarget(null);
+                              }}
+                              className={`flex items-center gap-1 bg-background/95 border rounded-full pl-1 pr-2.5 py-0.5 shadow-lg group/sub cursor-grab active:cursor-grabbing relative transition-all ${
+                                isDragOver 
+                                  ? "border-emerald-400 ring-4 ring-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.8)] bg-emerald-950/90 text-white scale-110" 
+                                  : "border-border/80 hover:border-primary/50"
+                              }`}
                               onClick={() => {
                                 router.push(`/analytics?id=${profile.id}`);
                               }}
@@ -1103,8 +1220,12 @@ export default function SquadPage() {
                             <button
                               key={subIdx}
                               onClick={() => openSearchForSlot(index, subIdx)}
-                              className="h-5 px-2 rounded-full border border-dashed border-white/35 hover:border-white hover:bg-white/10 flex items-center gap-1 text-white/50 hover:text-white cursor-pointer transition-all duration-200 bg-[#162a1e]/85 shadow-sm"
-                              title={`Assign player to ${slot.label}`}
+                              className={`h-5 px-2 rounded-full border border-dashed flex items-center gap-1 cursor-pointer transition-all duration-200 shadow-sm ${
+                                isDragOver 
+                                  ? "border-emerald-400 bg-emerald-500/30 text-white ring-4 ring-emerald-400/50 scale-110" 
+                                  : "border-white/35 hover:border-white hover:bg-white/10 text-white/50 hover:text-white bg-[#162a1e]/85"
+                              }`}
+                              title={`Assign player to ${slot.label} or drop player card here`}
                             >
                               <Plus size={8} />
                               <span className="text-[8px] font-bold uppercase leading-none">
@@ -1121,6 +1242,170 @@ export default function SquadPage() {
             </div>
 
           </div>
+        </section>
+
+        {/* ROW 3.5: SUBSTITUTES & RESERVES (VISIBLE ALWAYS) */}
+        <section className="space-y-3">
+          <div className="border-b border-border/60 pb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="h-4.5 w-4.5 text-primary" />
+              <h3 className="text-sm font-extrabold uppercase tracking-wider text-foreground">Substitutes & Reserves</h3>
+            </div>
+            <span className="text-[10px] font-bold text-muted-foreground bg-muted p-1 rounded uppercase tracking-wider">
+              {playersPerPos > 1 ? `Up to ${(playersPerPos - 1) * 11} substitute slots` : "No substitute slots active"}
+            </span>
+          </div>
+
+          {playersPerPos === 1 ? (
+            <Card className="border border-border/40 bg-card/60 backdrop-blur-md p-6 text-center text-xs text-muted-foreground italic">
+              No substitute slots enabled. Increase "Players Per Position" in the Tactics sidebar panel to assign substitutes.
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {(() => {
+                const subSlotsList: { slotIndex: number; label: string; subIndex: number }[] = [];
+                FORMATION_SLOTS[formation]?.forEach((slot, index) => {
+                  for (let s = 1; s < playersPerPos; s++) {
+                    subSlotsList.push({ slotIndex: index, label: slot.label, subIndex: s });
+                  }
+                });
+
+                return subSlotsList.map(({ slotIndex, label, subIndex }) => {
+                  const assignedSp = findSquadPlayer(slotIndex, subIndex);
+                  const profile = assignedSp ? playerDetails[assignedSp.player_id] : null;
+                  const targetKey = `${slotIndex}_${subIndex}`;
+                  const isDragOver = dragOverTarget === targetKey;
+
+                  if (profile) {
+                    return (
+                      <Card 
+                        key={targetKey} 
+                        draggable
+                        onDragStart={(e) => {
+                          const dragData = JSON.stringify({ slotIndex, subIndex, playerId: profile.id });
+                          e.dataTransfer.setData("application/json", dragData);
+                          e.dataTransfer.setData("text/plain", dragData);
+                          setDraggedPlayer({ slotIndex, subIndex, playerId: profile.id });
+                        }}
+                        onDragEnd={() => {
+                          setDraggedPlayer(null);
+                          setDragOverTarget(null);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (dragOverTarget !== targetKey) {
+                            setDragOverTarget(targetKey);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverTarget === targetKey) {
+                            setDragOverTarget(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragOverTarget(null);
+                          const rawData = e.dataTransfer.getData("application/json") || e.dataTransfer.getData("text/plain");
+                          if (!rawData) return;
+                          try {
+                            const data = JSON.parse(rawData);
+                            if (data && typeof data.slotIndex === "number" && typeof data.subIndex === "number") {
+                              handleSwapSlots(data.slotIndex, data.subIndex, slotIndex, subIndex);
+                            }
+                          } catch (err) {
+                            console.error("Invalid drag drop data", err);
+                          }
+                        }}
+                        className={`p-3 border bg-card flex items-center justify-between gap-3 transition-all duration-200 relative group/sub cursor-grab active:cursor-grabbing ${
+                          isDragOver 
+                            ? "border-emerald-400 ring-4 ring-emerald-500/50 scale-105 shadow-lg bg-emerald-950/40" 
+                            : "border-border hover:border-primary/50"
+                        }`}
+                      >
+                        <div 
+                          onClick={() => router.push(`/analytics?id=${profile.id}`)}
+                          className="flex items-center gap-2 cursor-pointer min-w-0 flex-grow"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-black text-xs shrink-0">
+                            {profile.overall}
+                          </div>
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-foreground truncate">{profile.name}</h4>
+                            <p className="text-[10px] text-muted-foreground font-semibold uppercase">
+                              Sub {label} ({subIndex})
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Swap/Promote Button */}
+                          <button
+                            onClick={() => swapStarterAndSub(slotIndex, subIndex)}
+                            className="p-1 rounded bg-muted hover:bg-primary/20 text-muted-foreground hover:text-primary cursor-pointer transition-colors"
+                            title="Swap with Starter"
+                          >
+                            <ArrowLeftRight size={13} />
+                          </button>
+                          
+                          {/* Remove Button */}
+                          <button
+                            onClick={() => removePlayerFromSlot(profile.id, profile.name)}
+                            className="p-1 rounded bg-muted hover:bg-destructive/20 text-muted-foreground hover:text-destructive cursor-pointer transition-colors"
+                            title="Remove player"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </Card>
+                    );
+                  } else {
+                    return (
+                      <button
+                        key={targetKey}
+                        onClick={() => openSearchForSlot(slotIndex, subIndex)}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (dragOverTarget !== targetKey) {
+                            setDragOverTarget(targetKey);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverTarget === targetKey) {
+                            setDragOverTarget(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragOverTarget(null);
+                          const rawData = e.dataTransfer.getData("application/json") || e.dataTransfer.getData("text/plain");
+                          if (!rawData) return;
+                          try {
+                            const data = JSON.parse(rawData);
+                            if (data && typeof data.slotIndex === "number" && typeof data.subIndex === "number") {
+                              handleSwapSlots(data.slotIndex, data.subIndex, slotIndex, subIndex);
+                            }
+                          } catch (err) {
+                            console.error("Invalid drag drop data", err);
+                          }
+                        }}
+                        className={`h-14 p-3 rounded-xl border border-dashed flex items-center justify-center gap-2 cursor-pointer transition-all duration-200 bg-card shadow-sm text-xs font-bold uppercase ${
+                          isDragOver 
+                            ? "border-emerald-400 bg-emerald-500/20 ring-4 ring-emerald-400/50 scale-105 text-white" 
+                            : "border-white/20 hover:border-white/40 hover:bg-white/5 text-white/40 hover:text-white"
+                        }`}
+                        title={`Assign player to Sub ${label} ${subIndex} or drop player here`}
+                      >
+                        <Plus size={14} />
+                        <span>{label} Sub ({subIndex})</span>
+                      </button>
+                    );
+                  }
+                });
+              })()}
+            </div>
+          )}
         </section>
 
         {/* ROW 4: PLAYER ROSTER DATA MATRIX (FULL WIDTH) */}
@@ -1192,8 +1477,53 @@ export default function SquadPage() {
 
                     const isStarred = starredPlayers[profile.id] || false;
 
+                    const targetKey = `${index}_0`;
+                    const isDragOver = dragOverTarget === targetKey;
+
                     return (
-                      <tr key={uniqueKey} className="hover:bg-muted/20 transition-colors">
+                      <tr 
+                        key={uniqueKey} 
+                        draggable
+                        onDragStart={(e) => {
+                          const dragData = JSON.stringify({ slotIndex: index, subIndex: 0, playerId: profile.id });
+                          e.dataTransfer.setData("application/json", dragData);
+                          e.dataTransfer.setData("text/plain", dragData);
+                          setDraggedPlayer({ slotIndex: index, subIndex: 0, playerId: profile.id });
+                        }}
+                        onDragEnd={() => {
+                          setDraggedPlayer(null);
+                          setDragOverTarget(null);
+                        }}
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = "move";
+                          if (dragOverTarget !== targetKey) {
+                            setDragOverTarget(targetKey);
+                          }
+                        }}
+                        onDragLeave={() => {
+                          if (dragOverTarget === targetKey) {
+                            setDragOverTarget(null);
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragOverTarget(null);
+                          const rawData = e.dataTransfer.getData("application/json") || e.dataTransfer.getData("text/plain");
+                          if (!rawData) return;
+                          try {
+                            const data = JSON.parse(rawData);
+                            if (data && typeof data.slotIndex === "number" && typeof data.subIndex === "number") {
+                              handleSwapSlots(data.slotIndex, data.subIndex, index, 0);
+                            }
+                          } catch (err) {
+                            console.error("Invalid drag drop data", err);
+                          }
+                        }}
+                        className={`transition-colors cursor-grab active:cursor-grabbing ${
+                          isDragOver ? "bg-emerald-500/20 border-l-4 border-l-emerald-400" : "hover:bg-muted/20"
+                        }`}
+                      >
                         <td className="px-4 py-3.5 text-center font-black text-primary uppercase">
                           {slotLabel}
                         </td>
@@ -1249,97 +1579,6 @@ export default function SquadPage() {
               </table>
             </div>
           </Card>
-        </section>
-
-        {/* ROW 3.5: SUBSTITUTES & RESERVES (VISIBLE ALWAYS) */}
-        <section className="space-y-3">
-          <div className="border-b border-border/60 pb-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="h-4.5 w-4.5 text-primary" />
-              <h3 className="text-sm font-extrabold uppercase tracking-wider text-foreground">Substitutes & Reserves</h3>
-            </div>
-            <span className="text-[10px] font-bold text-muted-foreground bg-muted p-1 rounded uppercase tracking-wider">
-              {playersPerPos > 1 ? `Up to ${(playersPerPos - 1) * 11} substitute slots` : "No substitute slots active"}
-            </span>
-          </div>
-
-          {playersPerPos === 1 ? (
-            <Card className="border border-border/40 bg-card/60 backdrop-blur-md p-6 text-center text-xs text-muted-foreground italic">
-              No substitute slots enabled. Increase "Players Per Position" in the Tactics sidebar panel to assign substitutes.
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {(() => {
-                const subSlotsList: { slotIndex: number; label: string; subIndex: number }[] = [];
-                FORMATION_SLOTS[formation]?.forEach((slot, index) => {
-                  for (let s = 1; s < playersPerPos; s++) {
-                    subSlotsList.push({ slotIndex: index, label: slot.label, subIndex: s });
-                  }
-                });
-
-                return subSlotsList.map(({ slotIndex, label, subIndex }) => {
-                  const assignedSp = findSquadPlayer(slotIndex, subIndex);
-                  const profile = assignedSp ? playerDetails[assignedSp.player_id] : null;
-
-                  if (profile) {
-                    return (
-                      <Card 
-                        key={`${slotIndex}_${subIndex}`} 
-                        className="p-3 border border-border bg-card flex items-center justify-between gap-3 hover:border-primary/50 transition-all duration-200 relative group/sub"
-                      >
-                        <div 
-                          onClick={() => router.push(`/analytics?id=${profile.id}`)}
-                          className="flex items-center gap-2 cursor-pointer min-w-0 flex-grow"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-black text-xs shrink-0">
-                            {profile.overall}
-                          </div>
-                          <div className="min-w-0">
-                            <h4 className="text-xs font-bold text-foreground truncate">{profile.name}</h4>
-                            <p className="text-[10px] text-muted-foreground font-semibold uppercase">
-                              Sub {label} ({subIndex})
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {/* Swap/Promote Button */}
-                          <button
-                            onClick={() => swapStarterAndSub(slotIndex, subIndex)}
-                            className="p-1 rounded bg-muted hover:bg-primary/20 text-muted-foreground hover:text-primary cursor-pointer transition-colors"
-                            title="Swap with Starter"
-                          >
-                            <ArrowLeftRight size={13} />
-                          </button>
-                          
-                          {/* Remove Button */}
-                          <button
-                            onClick={() => removePlayerFromSlot(profile.id, profile.name)}
-                            className="p-1 rounded bg-muted hover:bg-destructive/20 text-muted-foreground hover:text-destructive cursor-pointer transition-colors"
-                            title="Remove player"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </Card>
-                    );
-                  } else {
-                    return (
-                      <button
-                        key={`${slotIndex}_${subIndex}`}
-                        onClick={() => openSearchForSlot(slotIndex, subIndex)}
-                        className="h-14 p-3 rounded-xl border border-dashed border-white/20 hover:border-white/40 hover:bg-white/5 flex items-center justify-center gap-2 text-white/40 hover:text-white cursor-pointer transition-all duration-200 bg-card shadow-sm text-xs font-bold uppercase"
-                        title={`Assign player to Sub ${label} ${subIndex}`}
-                      >
-                        <Plus size={14} />
-                        <span>{label} Sub ({subIndex})</span>
-                      </button>
-                    );
-                  }
-                });
-              })()}
-            </div>
-          )}
         </section>
 
       </main>
