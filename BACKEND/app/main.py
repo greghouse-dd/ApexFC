@@ -93,8 +93,16 @@ app.include_router(ai_router)
 app.include_router(news_router)
 
 
+import threading
+
 @app.on_event("startup")
 def startup_warmup():
-    """Pre-load AI models at server startup to eliminate cold-start latency."""
-    from app.services.ai_service import ai_service
-    ai_service.warmup()
+    """Pre-load AI models asynchronously in a background thread to prevent port binding timeouts on Render."""
+    def warmup_task():
+        try:
+            from app.services.ai_service import ai_service
+            ai_service.warmup()
+        except Exception as e:
+            print(f"[AI Warmup Warning] Background model warmup failed: {e}")
+
+    threading.Thread(target=warmup_task, daemon=True).start()
