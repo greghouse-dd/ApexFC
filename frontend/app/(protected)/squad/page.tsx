@@ -783,12 +783,7 @@ export default function SquadPage() {
             <Card className="p-5 border border-border/40 bg-card/60 backdrop-blur-md flex flex-col justify-between space-y-3">
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-muted-foreground uppercase tracking-wider">Tactical Chemistry</span>
-                    <span className="text-[10px] text-emerald-400 font-extrabold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                      Multi-Vector Model
-                    </span>
-                  </div>
+                  <span className="font-bold text-muted-foreground uppercase tracking-wider">Tactical Chemistry</span>
                   <span className="font-black text-primary text-base">{chemistryScore} / 100</span>
                 </div>
                 <div className="w-full bg-muted h-2.5 rounded-full overflow-hidden border border-border/40">
@@ -802,31 +797,35 @@ export default function SquadPage() {
                 </p>
               </div>
 
-              {/* 6 Component Breakdown Bars */}
+              {/* 7 Component Breakdown Bars */}
               <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 pt-2 border-t border-border/40 text-[10px]">
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground font-medium">Passing Synergy (25%)</span>
+                  <span className="text-muted-foreground font-medium">Passing Network (20%)</span>
                   <span className="font-extrabold text-foreground">{chemistryBreakdown.passingSynergy}%</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground font-medium">Movement Sync (20%)</span>
-                  <span className="font-extrabold text-foreground">{chemistryBreakdown.movementSync}%</span>
+                  <span className="text-muted-foreground font-medium">Positional Fit (20%)</span>
+                  <span className="font-extrabold text-foreground">{chemistryBreakdown.positionalFit}%</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground font-medium">Tactical Agreement (20%)</span>
-                  <span className="font-extrabold text-foreground">{chemistryBreakdown.tacticalAgreement}%</span>
+                  <span className="text-muted-foreground font-medium">Tactical Sync (20%)</span>
+                  <span className="font-extrabold text-foreground">{chemistryBreakdown.tacticalSync}%</span>
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-muted-foreground font-medium">Familiarity (15%)</span>
                   <span className="font-extrabold text-foreground">{chemistryBreakdown.familiarity}%</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground font-medium">Defensive Coord (10%)</span>
+                  <span className="text-muted-foreground font-medium">Defensive Cohesion (10%)</span>
                   <span className="font-extrabold text-foreground">{chemistryBreakdown.defensiveCoord}%</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground font-medium">Attacking Coord (10%)</span>
+                  <span className="text-muted-foreground font-medium">Attacking Cohesion (10%)</span>
                   <span className="font-extrabold text-foreground">{chemistryBreakdown.attackingCoord}%</span>
+                </div>
+                <div className="flex justify-between items-center col-span-2 border-t border-border/20 pt-1 mt-0.5">
+                  <span className="text-muted-foreground font-medium">Leadership & Experience (5%)</span>
+                  <span className="font-extrabold text-primary">{chemistryBreakdown.leadership}%</span>
                 </div>
               </div>
 
