@@ -5,13 +5,25 @@ from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
+import os
+import bcrypt as _bcrypt
+
+# Passlib compatibility patch for bcrypt >= 4.0.0 on Python 3.11+
+if not hasattr(_bcrypt, "__about__"):
+    try:
+        class _About:
+            __version__ = _bcrypt.__version__
+        _bcrypt.__about__ = _About()
+    except Exception:
+        pass
+
 # --------------------------------------------------
 # Configuration
 # --------------------------------------------------
 
-SECRET_KEY = "8d3b7c5a9f2e1d4c6b8a0f7e9c1d3a5b7e9f1a2c4d6b8e0f3a5c7d9e1f2b4a6"
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY", os.environ.get("SECRET_KEY", "8d3b7c5a9f2e1d4c6b8a0f7e9c1d3a5b7e9f1a2c4d6b8e0f3a5c7d9e1f2b4a6"))
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours default for deployed session longevity
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/auth/login"

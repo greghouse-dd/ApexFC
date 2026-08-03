@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -36,7 +37,12 @@ class AuthService:
         if existing_username:
             raise ValueError("Username already taken")
 
+        # Explicitly compute next_id to guarantee primary key assignment on Postgres tables migrated via pandas to_sql
+        max_id = db.query(func.max(User.id)).scalar()
+        next_id = (max_id or 0) + 1
+
         new_user = User(
+            id=next_id,
             username=user_data.username,
             email=user_data.email,
             hashed_password=hash_password(user_data.password),

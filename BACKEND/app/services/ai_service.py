@@ -370,14 +370,25 @@ class AIService:
     def _get_llm(self):
         """Lazy-initialized singleton for the LLM client."""
         if self._llm is None:
-            self._llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
+            try:
+                api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+                if api_key:
+                    self._llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2, google_api_key=api_key)
+                else:
+                    self._llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
+            except Exception as e:
+                print(f"[AIService Warning] Could not initialize ChatGoogleGenerativeAI: {e}")
+                return None
         return self._llm
 
     def warmup(self):
         """Pre-load models at startup. On Render/memory-constrained environments, only load LLM to prevent OOM."""
         print("[AIService] Warming up models...")
         t0 = time.time()
-        self._get_llm()
+        try:
+            self._get_llm()
+        except Exception as e:
+            print(f"[AIService Warning] LLM warmup skipped: {e}")
         
         # Detect if we are on Render (Free tier memory constraints)
         is_render = os.environ.get("RENDER") == "true"

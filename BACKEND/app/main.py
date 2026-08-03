@@ -35,13 +35,18 @@ origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
 ]
+
 if frontend_url:
-    origins.append(frontend_url)
+    for url in frontend_url.split(","):
+        cleaned_url = url.strip()
+        if cleaned_url:
+            origins.append(cleaned_url)
+            origins.append(cleaned_url.rstrip("/"))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https://.*\.vercel\.app|https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

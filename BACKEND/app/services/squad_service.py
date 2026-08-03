@@ -1,5 +1,6 @@
 # backend/app/services/squad_service.py
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -33,8 +34,8 @@ class SquadService:
         db: Session,
         user_id: int,
         squad_name: str,
-        formation: str = "4-3-3"
-    ):
+        formation: str = "4-4-2"
+    ) -> Squad:
 
         # Check user exists
         user = (
@@ -44,7 +45,9 @@ class SquadService:
         )
 
         if not user:
-            raise ValueError("User not found.")
+            raise ValueError(
+                "User not found."
+            )
 
         # Check squad/club name already exists across all users
         existing = (
@@ -64,7 +67,11 @@ class SquadService:
                 "Invalid formation selected."
             )
 
+        max_squad_id = db.query(func.max(Squad.id)).scalar()
+        next_squad_id = (max_squad_id or 0) + 1
+
         squad = Squad(
+            id=next_squad_id,
             user_id=user_id,
             squad_name=squad_name,
             formation=formation,
@@ -216,7 +223,11 @@ class SquadService:
                 "Insufficient budget."
             )
 
+        max_sp_id = db.query(func.max(SquadPlayer.id)).scalar()
+        next_sp_id = (max_sp_id or 0) + 1
+
         squad_player = SquadPlayer(
+            id=next_sp_id,
             squad_id=squad_id,
             player_id=player_id,
             purchase_price=player.value_eur,
