@@ -56,14 +56,7 @@ def verify_password(
     plain_password: str,
     hashed_password: str
 ) -> bool:
-    # 1. Check pre-hashed password (supports passwords of any length)
-    pre_hashed = _pre_hash_password(plain_password)
-    if pwd_context.verify(pre_hashed, hashed_password):
-        return True
-
-    # 2. Fallback check for legacy truncated passwords in DB
-    truncated = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return pwd_context.verify(truncated, hashed_password)
+    return pwd_context.verify(_pre_hash_password(plain_password), hashed_password)
 
 
 # --------------------------------------------------
