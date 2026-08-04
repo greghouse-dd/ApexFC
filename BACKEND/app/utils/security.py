@@ -1,11 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt, JWTError
+# pyrefly: ignore [missing-import]
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
+import hashlib
 import os
+# pyrefly: ignore [missing-import]
 import bcrypt as _bcrypt
 
 # Passlib compatibility patch for bcrypt >= 4.0.0 on Python 3.11+
@@ -39,21 +42,28 @@ pwd_context = CryptContext(
 )
 
 
+def _pre_hash_password(password: str) -> str:
+    """Pre-hash password with SHA-256 to allow passwords of arbitrary length without bcrypt truncation limit."""
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
 def hash_password(password: str) -> str:
-    # Truncate password UTF-8 bytes to max 72 bytes for bcrypt algorithm safety
-    truncated = password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return pwd_context.hash(truncated)
+    pre_hashed = _pre_hash_password(password)
+    return pwd_context.hash(pre_hashed)
 
 
 def verify_password(
     plain_password: str,
     hashed_password: str
 ) -> bool:
+    # 1. Check pre-hashed password (supports passwords of any length)
+    pre_hashed = _pre_hash_password(plain_password)
+    if pwd_context.verify(pre_hashed, hashed_password):
+        return True
+
+    # 2. Fallback check for legacy truncated passwords in DB
     truncated = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return pwd_context.verify(
-        truncated,
-        hashed_password
-    )
+    return pwd_context.verify(truncated, hashed_password)
 
 
 # --------------------------------------------------
