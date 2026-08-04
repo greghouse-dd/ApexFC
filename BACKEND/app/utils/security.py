@@ -1,24 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
 from jose import jwt, JWTError
-# pyrefly: ignore [missing-import]
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 
 import hashlib
 import os
-# pyrefly: ignore [missing-import]
-import bcrypt as _bcrypt
-
-# Passlib compatibility patch for bcrypt >= 4.0.0 on Python 3.11+
-if not hasattr(_bcrypt, "__about__"):
-    try:
-        class _About:
-            __version__ = _bcrypt.__version__
-        _bcrypt.__about__ = _About()
-    except Exception:
-        pass
+import bcrypt
 
 # --------------------------------------------------
 # Configuration
@@ -33,30 +21,26 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 # --------------------------------------------------
-# Password Hashing
+# Password Hashing (using bcrypt directly, no passlib)
 # --------------------------------------------------
-
-pwd_context = CryptContext(
-    schemes=["bcrypt"],
-    deprecated="auto"
-)
 
 
 def _pre_hash_password(password: str) -> str:
-    """Pre-hash password with SHA-256 to allow passwords of arbitrary length without bcrypt truncation limit."""
+    """Pre-hash password with SHA-256 to support passwords of any length (always produces 64 chars, under bcrypt's 72-byte limit)."""
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
 def hash_password(password: str) -> str:
-    pre_hashed = _pre_hash_password(password)
-    return pwd_context.hash(pre_hashed)
+    pre_hashed = _pre_hash_password(password).encode("utf-8")
+    return bcrypt.hashpw(pre_hashed, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(
     plain_password: str,
     hashed_password: str
 ) -> bool:
-    return pwd_context.verify(_pre_hash_password(plain_password), hashed_password)
+    pre_hashed = _pre_hash_password(plain_password).encode("utf-8")
+    return bcrypt.checkpw(pre_hashed, hashed_password.encode("utf-8"))
 
 
 # --------------------------------------------------

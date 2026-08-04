@@ -5,7 +5,7 @@ from sqlalchemy import create_engine
 
 # Script to copy tables from local SQLite database to Supabase (PostgreSQL)
 
-LOCAL_SQLITE_PATH = os.path.join(os.path.dirname(__file__), "football_manager.db")
+LOCAL_SQLITE_PATH = "football_manager.db"
 
 def migrate():
     target_url = os.environ.get("DATABASE_URL")
