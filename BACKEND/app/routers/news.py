@@ -39,7 +39,7 @@ def get_fallback_news():
 
 @router.get("/football")
 def get_football_news():
-    url = "https://www.skysports.com/rss/12040"
+    url = "https://www.skysports.com/rss/11095"
     headers = {"User-Agent": "Mozilla/5.0"}
     req = urllib.request.Request(url, headers=headers)
     
