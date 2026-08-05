@@ -2,6 +2,9 @@ import os
 import sqlite3
 import pandas as pd
 from sqlalchemy import create_engine
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Script to copy tables from local SQLite database to Supabase (PostgreSQL)
 
@@ -15,13 +18,9 @@ def migrate():
         return
 
     if target_url.startswith("postgres://"):
-        target_url = target_url.replace("postgres://", "postgresql+pg8000://", 1)
-    elif target_url.startswith("postgresql://"):
-        target_url = target_url.replace("postgresql://", "postgresql+pg8000://", 1)
-
-    if not os.path.exists(LOCAL_SQLITE_PATH):
-        print(f"ERROR: Local SQLite database not found at {LOCAL_SQLITE_PATH}")
-        return
+        target_url = target_url.replace("postgres://", "postgresql+psycopg2://", 1)
+    elif target_url.startswith("postgresql://") and "+psycopg2" not in target_url:
+        target_url = target_url.replace("postgresql://", "postgresql+psycopg2://", 1)
 
     print(f"Connecting to target database...")
     target_engine = create_engine(target_url)
@@ -36,11 +35,20 @@ def migrate():
 
     print(f"Found tables to migrate: {tables}")
 
+    from sqlalchemy import text
+    print(f"Dropping existing tables with CASCADE to reset foreign key constraints...")
+    with target_engine.begin() as conn:
+        for t in ["squad_players", "transfer_history", "watchlists", "squads", "fifa_players", "users", "players"]:
+            try:
+                conn.execute(text(f"DROP TABLE IF EXISTS {t} CASCADE;"))
+            except Exception as e:
+                print(f"Notice: drop table {t}: {e}")
+
     for table in tables:
         print(f"Migrating table '{table}'...")
         df = pd.read_sql_query(f"SELECT * FROM {table}", sqlite_conn)
         print(f"  - Loaded {len(df)} rows.")
-        df.to_sql(table, con=target_engine, if_exists="replace", index=False)
+        df.to_sql(table, con=target_engine, if_exists="replace", index=False, chunksize=1000)
         print(f"  - Successfully written '{table}' to target database!")
 
     print("\n✅ Migration complete! All data successfully migrated to Supabase.")

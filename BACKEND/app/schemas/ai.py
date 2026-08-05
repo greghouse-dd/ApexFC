@@ -30,8 +30,8 @@ class HiddenGemResponse(BaseModel):
     age: int
     overall: int
     potential: int
-    value_eur: Optional[float]
-    wage_eur: Optional[float]
+    value_eur: Optional[float] = None
+    wage_eur: Optional[float] = None
     predicted_value_eur: float
     undervaluation_gap: float
     hidden_gem_score: float
