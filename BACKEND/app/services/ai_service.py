@@ -450,30 +450,28 @@ class AIService:
 
     def _get_embeddings(self):
         if self._embeddings is None:
-            api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-            
-            if api_key:
-                try:
-                    from langchain_google_genai import GoogleGenerativeAIEmbeddings
-                    print("[AIService] Using lightweight Google Gemini Embeddings (0 MB local RAM usage)...")
-                    self._embeddings = GoogleGenerativeAIEmbeddings(
-                        model="models/gemini-embedding-001",
-                        google_api_key=api_key
-                    )
-                    return self._embeddings
-                except Exception as e:
-                    print(f"[AIService Warning] Could not initialize GoogleGenerativeAIEmbeddings: {e}")
-
-            # Fallback to HuggingFace Embeddings if no Gemini key
             try:
                 from langchain_community.embeddings import HuggingFaceEmbeddings
+                print("[AIService] Using BAAI/bge-small-en-v1.5 Embeddings matching vector DB index...")
                 self._embeddings = HuggingFaceEmbeddings(
                     model_name="BAAI/bge-small-en-v1.5",
                     model_kwargs={"device": "cpu"}
                 )
             except Exception as e:
-                print(f"[AIService Warning] HuggingFaceEmbeddings fallback: {e}")
-                self._embeddings = None
+                print(f"[AIService Warning] HuggingFaceEmbeddings initialization error: {e}")
+                api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+                if api_key:
+                    try:
+                        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+                        self._embeddings = GoogleGenerativeAIEmbeddings(
+                            model="models/gemini-embedding-001",
+                            google_api_key=api_key
+                        )
+                    except Exception as g_err:
+                        print(f"[AIService Error] Gemini embeddings fallback failed: {g_err}")
+                        self._embeddings = None
+                else:
+                    self._embeddings = None
         return self._embeddings
 
     def _get_kb_index(self):
