@@ -451,9 +451,8 @@ class AIService:
     def _get_embeddings(self):
         if self._embeddings is None:
             api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-            is_render = os.environ.get("RENDER", "").lower() in ("true", "1", "yes")
             
-            if api_key and (is_render or os.environ.get("USE_GEMINI_EMBEDDINGS") == "true"):
+            if api_key:
                 try:
                     from langchain_google_genai import GoogleGenerativeAIEmbeddings
                     print("[AIService] Using lightweight Google Gemini Embeddings (0 MB local RAM usage)...")
@@ -465,12 +464,12 @@ class AIService:
                 except Exception as e:
                     print(f"[AIService Warning] Could not initialize GoogleGenerativeAIEmbeddings: {e}")
 
-            # Fallback to HuggingFace Embeddings if not on Render and no Gemini key
+            # Fallback to HuggingFace Embeddings if no Gemini key
             try:
                 from langchain_community.embeddings import HuggingFaceEmbeddings
                 self._embeddings = HuggingFaceEmbeddings(
                     model_name="BAAI/bge-small-en-v1.5",
-                    model_kwargs={"device": "cpu", "local_files_only": True}
+                    model_kwargs={"device": "cpu"}
                 )
             except Exception as e:
                 print(f"[AIService Warning] HuggingFaceEmbeddings fallback: {e}")
@@ -886,202 +885,167 @@ class AIService:
     def query_tactical_advisor_stream(self, query: str) -> Generator[str, None, None]:
         start_time = time.time()
         
-        # 1. Query Expansion (Synonyms)
-        expanded_query = expand_query(query)
-        
-        # 2. Semantic Cache Check
-        cache_start = time.time()
-        cache = self._get_cache_index()
-        cached_response = cache.check_cache(query)
-        cache_time_ms = (time.time() - cache_start) * 1000
-        
-        if cached_response:
-            total_time_ms = (time.time() - start_time) * 1000
-            print(f"\n--- RAG PIPELINE PERFORMANCE METRICS ---")
-            print(f"User Query: '{query}'")
-            print(f"Cache Status: HIT")
-            print(f"Cache Lookup Time: {cache_time_ms:.2f} ms")
-            print(f"Total Execution Time: {total_time_ms:.2f} ms")
-            print(f"----------------------------------------\n")
+        try:
+            # 1. Query Expansion (Synonyms)
+            expanded_query = expand_query(query)
             
-            yield cached_response
-            return
+            # 2. Semantic Cache Check
+            cache = None
+            try:
+                cache = self._get_cache_index()
+                if cache:
+                    cached_response = cache.check_cache(query)
+                    if cached_response and cached_response.strip():
+                        print(f"\n[Semantic Cache] HIT for query: '{query}'")
+                        yield cached_response
+                        return
+            except Exception as cache_err:
+                print(f"[AIService Warning] Cache lookup failed: {cache_err}")
 
-        # 3. Cache Miss - Query Understanding & Retrieval
-        retrieval_start = time.time()
-        
-        # Analyze user query: classify intent and match concepts locally (1ms)
-        analysis = self._analyze_query(query)
-        query_type = analysis.get("query_type", "tactical_interaction")
-        subqueries = analysis.get("subqueries", [query])
-        required_concepts = analysis.get("required_concepts", [])
-        preferred_doc_types = analysis.get("preferred_document_types", [])
-        
-        metadata_filter = detect_metadata_filter(query)
-        
-        bm25_retriever = self._get_bm25_retriever()
-        kb_index = self._get_kb_index()
-        
-        rrf_scores = {}
-        k_val = 60
-        
-        # Perform exactly ONE dense search on the main query to save CPU embedding latency
-        dense_start = time.time()
-        dense_docs = kb_index.search_dense(expanded_query, k=20)
-        dense_time_ms = (time.time() - dense_start) * 1000
-        
-        bm25_time_ms = 0.0
-        # Perform fast lexical BM25 searches for each decomposed subquery (sub-15ms)
-        for sub_q in subqueries:
-            expanded_sub_q = expand_query(sub_q)
-            bm25_sub_start = time.time()
-            sub_bm25_docs = bm25_retriever.invoke(expanded_sub_q)[:10]
-            bm25_time_ms += (time.time() - bm25_sub_start) * 1000
+            # 3. Cache Miss - Query Understanding & Retrieval
+            retrieval_start = time.time()
             
-            # Aggregate BM25 ranks
-            for rank, doc in enumerate(sub_bm25_docs, start=1):
+            # Analyze user query
+            analysis = self._analyze_query(query)
+            query_type = analysis.get("query_type", "tactical_interaction")
+            subqueries = analysis.get("subqueries", [query])
+            required_concepts = analysis.get("required_concepts", [])
+            preferred_doc_types = analysis.get("preferred_document_types", [])
+            
+            metadata_filter = detect_metadata_filter(query)
+            
+            dense_docs = []
+            try:
+                kb_index = self._get_kb_index()
+                if kb_index and kb_index.db:
+                    dense_docs = kb_index.search_dense(expanded_query, k=20)
+            except Exception as dense_err:
+                print(f"[AIService Warning] Dense retrieval failed: {dense_err}")
+
+            rrf_scores = {}
+            k_val = 60
+            
+            try:
+                bm25_retriever = self._get_bm25_retriever()
+                if bm25_retriever:
+                    for sub_q in subqueries:
+                        expanded_sub_q = expand_query(sub_q)
+                        sub_bm25_docs = bm25_retriever.invoke(expanded_sub_q)[:10]
+                        for rank, doc in enumerate(sub_bm25_docs, start=1):
+                            title = doc.metadata.get("title")
+                            if not title:
+                                continue
+                            if title not in rrf_scores:
+                                rrf_scores[title] = {"doc": doc, "score": 0.0}
+                            rrf_scores[title]["score"] += 1.0 / (k_val + rank)
+            except Exception as bm25_err:
+                print(f"[AIService Warning] BM25 retrieval failed: {bm25_err}")
+
+            # Aggregate Dense ranks
+            for rank, doc in enumerate(dense_docs, start=1):
                 title = doc.metadata.get("title")
                 if not title:
                     continue
                 if title not in rrf_scores:
                     rrf_scores[title] = {"doc": doc, "score": 0.0}
                 rrf_scores[title]["score"] += 1.0 / (k_val + rank)
-                
-        # Aggregate Dense ranks
-        for rank, doc in enumerate(dense_docs, start=1):
-            title = doc.metadata.get("title")
-            if not title:
-                continue
-            if title not in rrf_scores:
-                rrf_scores[title] = {"doc": doc, "score": 0.0}
-            rrf_scores[title]["score"] += 1.0 / (k_val + rank)
-                
-        # Sort and limit to top 20 candidates
-        fused_docs = [item["doc"] for item in sorted(rrf_scores.values(), key=lambda x: x["score"], reverse=True)][:20]
-        
-        # 4. Bypass MMR document embedding on CPU to save 11 seconds of latency
-        rrf_mmr_start = time.time()
-        diverse_docs = fused_docs
-        rrf_mmr_time_ms = (time.time() - rrf_mmr_start) * 1000
-        retrieval_time_ms = (time.time() - retrieval_start) * 1000
-        
-        # 5. Fast Reranking using ms-marco CrossEncoder
-        rerank_start = time.time()
-        decomposed_query_comb = f"{query} {' '.join(subqueries)}"
-        
-        # Rerank the top 6 candidates from the RRF list using CrossEncoder
-        rerank_docs = diverse_docs[:6]
-        if rerank_docs:
-            reranker = self._get_reranker()
-            if reranker is not None:
-                try:
-                    pairs = [[decomposed_query_comb, doc.page_content] for doc in rerank_docs]
-                    scores = reranker.predict(pairs)
-                    scored_docs = sorted(zip(rerank_docs, scores), key=lambda x: x[1], reverse=True)
-                    # Combine back with the rest of the unranked list just in case
-                    top_docs = [doc for doc, score in scored_docs] + diverse_docs[6:]
-                except Exception as e:
-                    print(f"[AIService] Error running reranker: {e}. Bypassing reranking.")
+                    
+            fused_docs = [item["doc"] for item in sorted(rrf_scores.values(), key=lambda x: x["score"], reverse=True)][:20]
+            diverse_docs = fused_docs
+            
+            # Fast Reranking using ms-marco CrossEncoder
+            decomposed_query_comb = f"{query} {' '.join(subqueries)}"
+            rerank_docs = diverse_docs[:6]
+            if rerank_docs:
+                reranker = self._get_reranker()
+                if reranker is not None:
+                    try:
+                        pairs = [[decomposed_query_comb, doc.page_content] for doc in rerank_docs]
+                        scores = reranker.predict(pairs)
+                        scored_docs = sorted(zip(rerank_docs, scores), key=lambda x: x[1], reverse=True)
+                        top_docs = [doc for doc, score in scored_docs] + diverse_docs[6:]
+                    except Exception as e:
+                        print(f"[AIService] Error running reranker: {e}. Bypassing reranking.")
+                        top_docs = diverse_docs
+                else:
                     top_docs = diverse_docs
             else:
                 top_docs = diverse_docs
-        else:
-            top_docs = diverse_docs
-            
-        rerank_time_ms = (time.time() - rerank_start) * 1000
-        
-        # Adaptive Top-K selection based on query intent classification
-        if query_type == "definition":
-            final_k = 2
-        elif query_type == "comparison":
-            final_k = 4
-        elif query_type in ["tactical_interaction", "coaching_method", "training_drill"]:
-            final_k = 5
-        else:
-            final_k = 3
-            
-        final_top_docs = top_docs[:final_k]
-        
-        # 6. Evidence Coverage Checking
-        retrieved_titles = {doc.metadata.get("title") for doc in final_top_docs}
-        retrieved_related = set()
-        for doc in final_top_docs:
-            for rc in doc.metadata.get("related_concepts", []):
-                retrieved_related.add(rc)
                 
-        missing_concepts = []
-        for req in required_concepts:
-            if req not in retrieved_titles and req not in retrieved_related:
-                # Direct check or loose substring check
-                if not any(req.lower() in t.lower() for t in retrieved_titles) and not any(req.lower() in r.lower() for r in retrieved_related):
-                    missing_concepts.append(req)
+            if query_type == "definition":
+                final_k = 2
+            elif query_type == "comparison":
+                final_k = 4
+            elif query_type in ["tactical_interaction", "coaching_method", "training_drill"]:
+                final_k = 5
+            else:
+                final_k = 3
+                
+            final_top_docs = top_docs[:final_k]
+            
+            # Evidence Coverage Checking
+            retrieved_titles = {doc.metadata.get("title") for doc in final_top_docs}
+            retrieved_related = set()
+            for doc in final_top_docs:
+                for rc in doc.metadata.get("related_concepts", []):
+                    retrieved_related.add(rc)
                     
-        limitations_context = ""
-        if missing_concepts:
-            limitations_context = f"The following required tactical topics were NOT found in the retrieved database context: {', '.join(missing_concepts)}. Acknowledge this limitation naturally at the end of the response."
+            missing_concepts = []
+            for req in required_concepts:
+                if req not in retrieved_titles and req not in retrieved_related:
+                    if not any(req.lower() in t.lower() for t in retrieved_titles) and not any(req.lower() in r.lower() for r in retrieved_related):
+                        missing_concepts.append(req)
+                        
+            limitations_context = ""
+            if missing_concepts:
+                limitations_context = f"The following required tactical topics were NOT found in the retrieved database context: {', '.join(missing_concepts)}. Acknowledge this limitation naturally at the end of the response."
 
-        # Assemble Context
-        context_parts = []
-        for doc in final_top_docs:
-            context_parts.append(
-                f"### Concept: {doc.metadata.get('title')}\n"
-                f"Document Type: {doc.metadata.get('document_type')}\n"
-                f"Category: {doc.metadata.get('category')}\n"
-                f"Phase: {doc.metadata.get('phase')}\n"
-                f"Description: {doc.page_content}"
-            )
-        context = "\n\n".join(context_parts)
-        
-        # 7. LLM Call
-        llm_start = time.time()
-        llm = self._get_llm()
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", TACTICAL_SYNTHESIS_PROMPT),
-            ("human", "{query}")
-        ])
-        chain = prompt | llm
-        
-        full_response = ""
-        try:
+            # Assemble Context
+            context_parts = []
+            for doc in final_top_docs:
+                context_parts.append(
+                    f"### Concept: {doc.metadata.get('title')}\n"
+                    f"Document Type: {doc.metadata.get('document_type')}\n"
+                    f"Category: {doc.metadata.get('category')}\n"
+                    f"Phase: {doc.metadata.get('phase')}\n"
+                    f"Description: {doc.page_content}"
+                )
+            context = "\n\n".join(context_parts)
+            
+            # LLM Call
+            llm = self._get_llm()
+            if not llm:
+                yield "The AI Tactical Advisor LLM is currently unavailable. Please verify API key configuration."
+                return
+
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", TACTICAL_SYNTHESIS_PROMPT),
+                ("human", "{query}")
+            ])
+            chain = prompt | llm
+            
+            full_response = ""
             for chunk in chain.stream({
                 "context": context, 
                 "limitations": limitations_context,
                 "query": query
             }):
-                yield chunk.content
-                full_response += chunk.content
-                
-            llm_time_ms = (time.time() - llm_start) * 1000
-            total_time_ms = (time.time() - start_time) * 1000
-            
-            # Print performance metrics
-            print(f"\n--- RAG PIPELINE PERFORMANCE METRICS ---")
-            print(f"User Query: '{query}'")
-            print(f"Decomposed Subqueries: {subqueries}")
-            print(f"Query Classification: {query_type}")
-            print(f"Required Concepts: {required_concepts}")
-            print(f"Missing Concepts: {missing_concepts}")
-            print(f"Preferred Doc Types: {preferred_doc_types}")
-            print(f"Metadata Filter: {metadata_filter}")
-            print(f"Adaptive K Selection: {final_k}")
-            print(f"Cache Status: MISS")
-            print(f"Total Retrieval Time: {retrieval_time_ms:.2f} ms")
-            print(f"  - Dense Search Time (accumulated): {dense_time_ms:.2f} ms")
-            print(f"  - BM25 Search Time (accumulated): {bm25_time_ms:.2f} ms")
-            print(f"  - RRF & MMR Time: {rrf_mmr_time_ms:.2f} ms")
-            print(f"Reranking Time: {rerank_time_ms:.2f} ms")
-            print(f"LLM Generation Time: {llm_time_ms:.2f} ms")
-            print(f"Total Execution Time: {total_time_ms:.2f} ms")
-            print(f"Generated Tokens (est): {len(full_response) // 4}")
-            print(f"----------------------------------------\n")
-            
-            # Cache the response
-            if full_response.strip():
-                cache.add_to_cache(query, full_response)
-                
+                text_chunk = getattr(chunk, "content", str(chunk))
+                if text_chunk:
+                    yield text_chunk
+                    full_response += text_chunk
+                    
+            if cache and full_response.strip():
+                try:
+                    cache.add_to_cache(query, full_response)
+                except Exception as c_err:
+                    print(f"[AIService Warning] Failed adding response to cache: {c_err}")
+                    
         except Exception as e:
-            print(f"[LLM Error during stream generation]: {e}")
-            yield "\nThe Tactical Advisor is temporarily busy. Please try again in a few seconds."
+            print(f"[AIService Error in query_tactical_advisor_stream]: {e}")
+            import traceback
+            traceback.print_exc()
+            yield "The Tactical Advisor encountered an issue reading its database. Please try asking your question again."
 
     def query_tactical_advisor(self, query: str) -> str:
         # Non-streaming helper
