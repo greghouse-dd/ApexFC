@@ -49,11 +49,11 @@ def get_db_attributes(db: Session, name: str, full_name: str, overall: int, shoo
     result = None
     try:
         if name:
-            query = text("SELECT * FROM fifa_players WHERE name = :name COLLATE NOCASE")
+            query = text("SELECT * FROM fifa_players WHERE LOWER(name) = LOWER(:name)")
             result = db.execute(query, {"name": name}).first()
             
         if (result is None) and full_name:
-            query = text("SELECT * FROM fifa_players WHERE full_name = :full_name COLLATE NOCASE")
+            query = text("SELECT * FROM fifa_players WHERE LOWER(full_name) = LOWER(:full_name)")
             result = db.execute(query, {"full_name": full_name}).first()
  
         if (result is None) and name:

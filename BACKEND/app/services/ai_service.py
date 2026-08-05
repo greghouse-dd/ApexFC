@@ -389,9 +389,9 @@ class AIService:
             try:
                 api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
                 if api_key:
-                    self._llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2, google_api_key=api_key)
+                    self._llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.2, google_api_key=api_key)
                 else:
-                    self._llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.2)
+                    self._llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0.2)
             except Exception as e:
                 print(f"[AIService Warning] Could not initialize ChatGoogleGenerativeAI: {e}")
                 return None
