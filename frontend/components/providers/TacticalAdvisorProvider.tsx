@@ -118,6 +118,19 @@ export function TacticalAdvisorProvider({ children }: { children: React.ReactNod
           });
         }
       }
+
+      // Safety net: if no content was streamed, show a fallback
+      setMessages((prev) => {
+        const updated = [...prev];
+        const last = updated[updated.length - 1];
+        if (last && last.role === "assistant" && !last.content.trim()) {
+          updated[updated.length - 1] = {
+            ...last,
+            content: "The Tactical Advisor did not return a response. Please try rephrasing your question.",
+          };
+        }
+        return updated;
+      });
     } catch (err) {
       console.error(err);
       setMessages((prev) => [

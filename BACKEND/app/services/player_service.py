@@ -266,7 +266,7 @@ class PlayerService:
     ):
         player = (
             db.query(Player)
-            .filter(Player.fifa_id == player_id)
+            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
             .first()
         )
 

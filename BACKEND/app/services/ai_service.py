@@ -1030,10 +1030,25 @@ class AIService:
                 "limitations": limitations_context,
                 "query": query
             }):
-                text_chunk = getattr(chunk, "content", str(chunk))
+                raw_content = getattr(chunk, "content", "")
+                # Gemini 2.5 thinking models may return content as a list
+                # of content block dicts, e.g. [{"type": "text", "text": "..."}]
+                if isinstance(raw_content, list):
+                    text_chunk = "".join(
+                        block.get("text", "") for block in raw_content
+                        if isinstance(block, dict) and block.get("type") != "thinking"
+                    )
+                elif isinstance(raw_content, str):
+                    text_chunk = raw_content
+                else:
+                    text_chunk = str(raw_content) if raw_content else ""
                 if text_chunk:
                     yield text_chunk
                     full_response += text_chunk
+
+            # Safety net: if the model produced only thinking chunks with no text output
+            if not full_response.strip():
+                yield "I wasn't able to generate a response for that query. Please try rephrasing your question."
                     
             if cache and full_response.strip():
                 try:

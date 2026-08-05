@@ -43,7 +43,7 @@ class TransferService:
 
         player = (
             db.query(Player)
-            .filter(Player.fifa_id == player_id)
+            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
             .first()
         )
 
@@ -211,7 +211,7 @@ class TransferService:
 
         player = (
             db.query(Player)
-            .filter(Player.fifa_id == player_id)
+            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
             .first()
         )
 
@@ -324,7 +324,7 @@ class TransferService:
             player = (
                 db.query(Player)
                 .filter(
-                    Player.fifa_id == transfer.player_id
+                    (Player.fifa_id == transfer.player_id) | (Player.id == transfer.player_id)
                 )
                 .first()
             )
@@ -355,7 +355,7 @@ class TransferService:
         player = (
             db.query(Player)
             .filter(
-                Player.fifa_id == player_id
+                (Player.fifa_id == player_id) | (Player.id == player_id)
             )
             .first()
         )
@@ -425,7 +425,7 @@ class TransferService:
             player = (
                 db.query(Player)
                 .filter(
-                    Player.fifa_id == transfer.player_id
+                    (Player.fifa_id == transfer.player_id) | (Player.id == transfer.player_id)
                 )
                 .first()
             )

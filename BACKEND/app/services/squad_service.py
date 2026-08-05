@@ -644,7 +644,7 @@ class SquadService:
             player = (
                 db.query(Player)
                 .filter(
-                    Player.fifa_id == squad_player.player_id
+                    (Player.id == squad_player.player_id) | (Player.fifa_id == squad_player.player_id)
                 )
                 .first()
             )
@@ -688,7 +688,7 @@ class SquadService:
             player = (
                 db.query(Player)
                 .filter(
-                    Player.fifa_id == squad_player.player_id
+                    (Player.id == squad_player.player_id) | (Player.fifa_id == squad_player.player_id)
                 )
                 .first()
             )

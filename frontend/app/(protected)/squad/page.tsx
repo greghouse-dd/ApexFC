@@ -287,6 +287,13 @@ export default function SquadPage() {
           setPlaystyle(storedPlaystyle);
         }
       }
+      const handleSquadUpdate = () => {
+        fetchOrCreateSquad(user.id, false);
+      };
+      window.addEventListener("squad-updated", handleSquadUpdate);
+      return () => {
+        window.removeEventListener("squad-updated", handleSquadUpdate);
+      };
     }
   }, [user]);
 
