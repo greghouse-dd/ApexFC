@@ -807,19 +807,19 @@ class AIService:
             if max_market_value is not None:
                 query = query.filter(Player.value_eur <= max_market_value)
             if min_xg is not None:
-                query = query.filter(Player.xg >= min_xg)
+                query = query.filter(or_(Player.xg >= min_xg, Player.xg.is_(None)))
             if min_goals is not None:
-                query = query.filter(Player.goals >= min_goals)
+                query = query.filter(or_(Player.goals >= min_goals, Player.goals.is_(None)))
             if min_pass_accuracy:
-                query = query.filter(Player.passing >= min_pass_accuracy)
+                query = query.filter(or_(Player.passing >= min_pass_accuracy, Player.passing.is_(None)))
             if min_progressive_passes is not None:
-                query = query.filter(Player.progressive_passes >= min_progressive_passes)
+                query = query.filter(or_(Player.progressive_passes >= min_progressive_passes, Player.progressive_passes.is_(None)))
             if foot:
                 query = query.filter(Player.preferred_foot == foot)
                 
             matching_ids = {r[0] for r in query.all()}
             if not matching_ids:
-                return []
+                return self._get_db_fallback_hidden_gems(db=db, limit=limit)
 
         is_render = os.environ.get("RENDER", "").lower() in ("true", "1", "yes")
         if is_render or os.environ.get("USE_DB_HIDDEN_GEMS") == "true":

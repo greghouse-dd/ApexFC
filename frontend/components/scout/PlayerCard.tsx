@@ -24,16 +24,16 @@ export default function PlayerCard({ player }: Props) {
 
   useEffect(() => {
     const checkStatus = async () => {
-      if (!user) return;
+      if (!user?.id || !player?.id) return;
       try {
         const res = await api.get(`/watchlist/check/${user.id}/${player.id}`);
-        setIsWatchlisted(res.data.watchlisted);
+        setIsWatchlisted(res.data?.watchlisted || false);
       } catch (err) {
-        // Silently swallow errors
+        // Silently swallow errors for unauthenticated/unreachable calls
       }
     };
     checkStatus();
-  }, [user, player.id]);
+  }, [user?.id, player?.id]);
 
   const handleToggleWatchlist = async (e: React.MouseEvent) => {
     e.stopPropagation(); // Avoid triggering parent router navigation!
