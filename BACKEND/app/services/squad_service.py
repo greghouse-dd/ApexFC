@@ -181,19 +181,19 @@ class SquadService:
 
         player = (
             db.query(Player)
-            .filter(Player.fifa_id == player_id)
+            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
             .first()
         )
 
         if not player:
             raise ValueError("Player not found.")
 
-        # Prevent duplicate players
+        # Prevent duplicate players (checking both player.id and fifa_id)
         existing = (
             db.query(SquadPlayer)
             .filter(
                 SquadPlayer.squad_id == squad_id,
-                SquadPlayer.player_id == player_id
+                SquadPlayer.player_id.in_([player.id, player.fifa_id])
             )
             .first()
         )
@@ -203,7 +203,7 @@ class SquadService:
                 "Player already exists in squad."
             )
 
-        # Maximum 11 players
+        # Maximum 33 players
         player_count = (
             db.query(SquadPlayer)
             .filter(
@@ -215,7 +215,7 @@ class SquadService:
         if player_count >= 33:
             raise ValueError(
                 "Squad already has 33 players."
-            );
+            )
 
         # Budget validation
         if player.value_eur > squad.budget:
@@ -229,7 +229,7 @@ class SquadService:
         squad_player = SquadPlayer(
             id=next_sp_id,
             squad_id=squad_id,
-            player_id=player_id,
+            player_id=player.id,  # Save player.id (primary key referencing players.id foreign key)
             purchase_price=player.value_eur,
             current_value=player.value_eur,
             position=position,
@@ -245,7 +245,7 @@ class SquadService:
             db.query(Watchlist)
             .filter(
                 Watchlist.user_id == squad.user_id,
-                Watchlist.player_id == player.fifa_id
+                Watchlist.player_id.in_([player.id, player.fifa_id])
             )
             .first()
         )
@@ -267,11 +267,20 @@ class SquadService:
         player_id: int
     ):
 
+        player = (
+            db.query(Player)
+            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
+            .first()
+        )
+        target_ids = [player_id]
+        if player:
+            target_ids = [player.id, player.fifa_id]
+
         squad_player = (
             db.query(SquadPlayer)
             .filter(
                 SquadPlayer.squad_id == squad_id,
-                SquadPlayer.player_id == player_id
+                SquadPlayer.player_id.in_(target_ids)
             )
             .first()
         )
@@ -291,11 +300,11 @@ class SquadService:
         squad.budget += squad_player.current_value
 
         # Remove captain
-        if squad.captain_id == player_id:
+        if squad.captain_id in target_ids:
             squad.captain_id = None
 
         # Remove vice captain
-        if squad.vice_captain_id == player_id:
+        if squad.vice_captain_id in target_ids:
             squad.vice_captain_id = None
 
         db.delete(squad_player)
