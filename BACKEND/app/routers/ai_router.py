@@ -71,7 +71,8 @@ def get_hidden_gems(
         )
         return gems
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"[AI Router Warning] Hidden gems error: {e}. Returning database fallback.")
+        return ai_service._get_db_fallback_hidden_gems(db=db, limit=limit)
 
 @router.post("/tactical-advisor")
 def get_tactical_advice(request: TacticalAdvisorRequest):

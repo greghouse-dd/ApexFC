@@ -33,8 +33,24 @@ def _get_concept_keys():
 
 from app.models.player import Player
 
+def _resolve_ai_service_dir():
+    base_file = os.path.abspath(__file__)
+    curr = os.path.dirname(base_file)
+    for _ in range(5):
+        candidate = os.path.join(curr, "ai-service")
+        if os.path.exists(candidate):
+            return candidate
+        parent = os.path.dirname(curr)
+        if parent == curr:
+            break
+        curr = parent
+    for render_path in ["/opt/render/project/src/ai-service", "/opt/render/project/ai-service", "./ai-service"]:
+        if os.path.exists(render_path):
+            return os.path.abspath(render_path)
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(base_file)))), "ai-service")
+
 # Absolute paths to the ai-service directory
-AI_SERVICE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "ai-service")
+AI_SERVICE_DIR = _resolve_ai_service_dir()
 ML_DATA_DIR = os.path.join(AI_SERVICE_DIR, "data", "ml")
 MODELS_DIR = os.path.join(AI_SERVICE_DIR, "models")
 DB_DIR = os.path.join(AI_SERVICE_DIR, "data", "vector_db")
@@ -544,8 +560,50 @@ class AIService:
             "preferred_document_types": preferred_doc_types
         }
 
+    def _get_db_fallback_hidden_gems(self, db: Session, limit: int = 20, matching_ids: set | None = None):
+        """Fallback method when ML parquet files are missing or unreadable on Render."""
+        query = db.query(Player).filter(Player.is_active == True)
+        if matching_ids:
+            query = query.filter(Player.fifa_id.in_(matching_ids))
+        else:
+            query = query.filter(
+                Player.age <= 25,
+                Player.potential >= 75,
+                Player.potential > Player.overall
+            )
+            
+        players = query.order_by((Player.potential - Player.overall).desc(), Player.potential.desc()).limit(limit * 3).all()
+        results = []
+        for p in players:
+            val = float(p.value_eur or 1000000.0)
+            pot_gap = max(1, (p.potential or 75) - (p.overall or 65))
+            predicted_val = round(val * (1.0 + (pot_gap * 0.15)), 2)
+            gap = round(predicted_val - val, 2)
+            score = round(min(99.0, max(50.0, 70.0 + (pot_gap * 3.5) + ((26 - (p.age or 20)) * 1.2))), 1)
+            
+            results.append({
+                "fifa_id": p.fifa_id,
+                "name": p.name,
+                "age": p.age or 20,
+                "overall": p.overall or 70,
+                "potential": p.potential or 80,
+                "value_eur": p.value_eur,
+                "wage_eur": p.wage_eur,
+                "predicted_value_eur": predicted_val,
+                "undervaluation_gap": gap,
+                "hidden_gem_score": score
+            })
+            if len(results) >= limit:
+                break
+        return results
+
     def get_similar_players(self, db: Session, fifa_id: int, k: int = 5):
-        df, knn = self._get_similarity_model()
+        try:
+            df, knn = self._get_similarity_model()
+        except Exception as e:
+            print(f"[AIService Warning] Could not load similarity model: {e}")
+            return None
+
         target_row = df[df['player_id'] == fifa_id]
         if target_row.empty:
             return None
@@ -557,8 +615,9 @@ class AIService:
         fetch_k = min(k * 10, len(df))
         distances, indices = knn.kneighbors(target_features, n_neighbors=fetch_k)
         
-        similar_players = []
         seen_fifa_ids = {fifa_id}
+        candidate_ids = []
+        dist_map = {}
         
         for i in range(1, len(indices[0])):
             idx = indices[0][i]
@@ -569,8 +628,23 @@ class AIService:
                 continue
                 
             seen_fifa_ids.add(sim_fifa_id)
-            db_player = db.query(Player).filter(Player.fifa_id == sim_fifa_id).first()
+            candidate_ids.append(sim_fifa_id)
+            dist_map[sim_fifa_id] = dist
+            if len(candidate_ids) >= k * 4:
+                break
+
+        if not candidate_ids:
+            return []
+
+        # Batch query all candidate players in ONE query to prevent N+1 performance issues
+        db_players = db.query(Player).filter(Player.fifa_id.in_(candidate_ids)).all()
+        player_map = {p.fifa_id: p for p in db_players}
+        
+        similar_players = []
+        for sim_fifa_id in candidate_ids:
+            db_player = player_map.get(sim_fifa_id)
             if db_player:
+                dist = dist_map[sim_fifa_id]
                 sim_score = max(0, 100 - (dist * 2)) 
                 similar_players.append({
                     "fifa_id": db_player.fifa_id,
@@ -589,9 +663,8 @@ class AIService:
                     "club_logo": db_player.club_logo,
                     "nation_flag": db_player.nation_flag
                 })
-                
-            if len(similar_players) >= k:
-                break
+                if len(similar_players) >= k:
+                    break
                 
         return similar_players
 
@@ -670,10 +743,16 @@ class AIService:
             if not matching_ids:
                 return []
 
-        df = self._get_hidden_gems_data()
+        try:
+            df = self._get_hidden_gems_data()
+        except Exception as e:
+            print(f"[AIService Warning] Could not load hidden gems ML features ({e}). Using DB fallback.")
+            return self._get_db_fallback_hidden_gems(db=db, limit=limit, matching_ids=matching_ids)
+
         top_gems = df.sort_values('hidden_gem_score', ascending=False)
         
-        results = []
+        candidate_rows = []
+        candidate_ids = []
         seen_fifa_ids = set()
         
         for _, row in top_gems.iterrows():
@@ -684,7 +763,22 @@ class AIService:
                 continue
                 
             seen_fifa_ids.add(sim_fifa_id)
-            db_player = db.query(Player).filter(Player.fifa_id == sim_fifa_id).first()
+            candidate_rows.append(row)
+            candidate_ids.append(sim_fifa_id)
+            if len(candidate_ids) >= limit * 5:
+                break
+
+        if not candidate_ids:
+            return self._get_db_fallback_hidden_gems(db=db, limit=limit, matching_ids=matching_ids)
+
+        # Batch query all candidate players in ONE query
+        db_players = db.query(Player).filter(Player.fifa_id.in_(candidate_ids)).all()
+        player_map = {p.fifa_id: p for p in db_players}
+
+        results = []
+        for row in candidate_rows:
+            sim_fifa_id = int(row['player_id'])
+            db_player = player_map.get(sim_fifa_id)
             if db_player:
                 results.append({
                     "fifa_id": db_player.fifa_id,
@@ -694,14 +788,17 @@ class AIService:
                     "potential": db_player.potential,
                     "value_eur": db_player.value_eur,
                     "wage_eur": db_player.wage_eur,
-                    "predicted_value_eur": row['predicted_value_eur'],
-                    "undervaluation_gap": row['undervaluation_gap'],
-                    "hidden_gem_score": row['hidden_gem_score']
+                    "predicted_value_eur": float(row['predicted_value_eur']),
+                    "undervaluation_gap": float(row['undervaluation_gap']),
+                    "hidden_gem_score": float(row['hidden_gem_score'])
                 })
                 
             if len(results) >= limit:
                 break
-                
+
+        if not results:
+            return self._get_db_fallback_hidden_gems(db=db, limit=limit, matching_ids=matching_ids)
+
         return results
 
     def query_tactical_advisor_stream(self, query: str) -> Generator[str, None, None]:

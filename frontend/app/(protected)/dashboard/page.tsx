@@ -65,8 +65,9 @@ export default function DashboardPage() {
     const fetchDashboardData = async () => {
       if (!user) return;
       setLoading(true);
+
+      // 1. Fetch Squad
       try {
-        // 1. Fetch Squad
         const squadRes = await api.get("/squads/", { params: { user_id: user.id } });
         const activeSquadSummary = squadRes.data?.[0];
         if (activeSquadSummary) {
@@ -92,8 +93,12 @@ export default function DashboardPage() {
           );
           setSquadProfiles(profiles);
         }
+      } catch (squadErr) {
+        console.error("Error loading squad on dashboard:", squadErr);
+      }
 
-        // 2. Fetch Watchlist count & items
+      // 2. Fetch Watchlist count & items
+      try {
         const watchRes = await api.get(`/watchlist/${user.id}`);
         const watchItems = watchRes.data || [];
         setWatchlistCount(watchItems.length);
@@ -111,21 +116,24 @@ export default function DashboardPage() {
           })
         );
         setWatchlistPlayers(watchDetails.filter(Boolean));
+      } catch (watchErr) {
+        console.error("Error loading watchlist on dashboard:", watchErr);
+      }
 
-        // 3. Fetch Top 3 AI Gems
+      // 3. Fetch Top 3 AI Gems
+      try {
         const gemsRes = await api.get("/ai/hidden-gems", { params: { limit: 3 } });
         setGems(gemsRes.data || []);
+      } catch (gemsErr) {
+        console.error("Error loading AI hidden gems on dashboard:", gemsErr);
+      }
 
-        // 4. Fetch Football News Feed
-        try {
-          const newsRes = await api.get("/news/football");
-          setNews(newsRes.data || []);
-        } catch (newsErr) {
-          console.error("Error loading news feed on dashboard:", newsErr);
-        }
-
-      } catch (err) {
-        console.error("Error loading dashboard data:", err);
+      // 4. Fetch Football News Feed
+      try {
+        const newsRes = await api.get("/news/football");
+        setNews(newsRes.data || []);
+      } catch (newsErr) {
+        console.error("Error loading news feed on dashboard:", newsErr);
       } finally {
         setLoading(false);
       }
