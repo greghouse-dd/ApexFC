@@ -450,27 +450,54 @@ class AIService:
 
     def _get_embeddings(self):
         if self._embeddings is None:
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            self._embeddings = HuggingFaceEmbeddings(
-                model_name="BAAI/bge-small-en-v1.5",
-                model_kwargs={"device": "cpu", "local_files_only": True}
-            )
+            api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
+            is_render = os.environ.get("RENDER", "").lower() in ("true", "1", "yes")
+            
+            if api_key and (is_render or os.environ.get("USE_GEMINI_EMBEDDINGS") == "true"):
+                try:
+                    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+                    print("[AIService] Using lightweight Google Gemini Embeddings (0 MB local RAM usage)...")
+                    self._embeddings = GoogleGenerativeAIEmbeddings(
+                        model="models/text-embedding-004",
+                        google_api_key=api_key
+                    )
+                    return self._embeddings
+                except Exception as e:
+                    print(f"[AIService Warning] Could not initialize GoogleGenerativeAIEmbeddings: {e}")
+
+            # Fallback to HuggingFace Embeddings if not on Render and no Gemini key
+            try:
+                from langchain_community.embeddings import HuggingFaceEmbeddings
+                self._embeddings = HuggingFaceEmbeddings(
+                    model_name="BAAI/bge-small-en-v1.5",
+                    model_kwargs={"device": "cpu", "local_files_only": True}
+                )
+            except Exception as e:
+                print(f"[AIService Warning] HuggingFaceEmbeddings fallback: {e}")
+                self._embeddings = None
         return self._embeddings
 
     def _get_kb_index(self):
         if self._kb_index is None:
-            self._kb_index = KnowledgeBaseIndex(DB_DIR, self._get_embeddings())
+            emb = self._get_embeddings()
+            if emb is None:
+                return None
+            self._kb_index = KnowledgeBaseIndex(DB_DIR, emb)
         return self._kb_index
 
     def _get_cache_index(self):
         if self._cache_index is None:
-            self._cache_index = SemanticCacheIndex(DB_DIR, self._get_embeddings())
+            emb = self._get_embeddings()
+            if emb is None:
+                return None
+            self._cache_index = SemanticCacheIndex(DB_DIR, emb)
         return self._cache_index
 
     def _get_bm25_retriever(self):
         if self._bm25_retriever is None:
             kb = self._get_kb_index()
-            # Fetch all documents in FAISS to feed to BM25
+            if not kb or not kb.db:
+                return None
             docs = list(kb.db.docstore._dict.values())
             from langchain_community.retrievers import BM25Retriever
             self._bm25_retriever = BM25Retriever.from_documents(docs)
@@ -478,8 +505,8 @@ class AIService:
 
     def _get_reranker(self):
         if self._reranker is None:
-            is_render = os.environ.get("RENDER") == "true"
-            if is_render:
+            is_render = os.environ.get("RENDER", "").lower() in ("true", "1", "yes")
+            if is_render or os.environ.get("DISABLE_HEAVY_RERANKER") == "true":
                 print("[AIService] Reranker disabled on Render to save memory.")
                 return None
             try:
@@ -597,16 +624,67 @@ class AIService:
                 break
         return results
 
+    def _get_db_fallback_similar_players(self, db: Session, fifa_id: int, k: int = 5):
+        """Zero-RAM SQL-based similarity fallback using player attribute vectors."""
+        target = db.query(Player).filter(Player.fifa_id == fifa_id).first()
+        if not target:
+            return None
+            
+        candidates = db.query(Player).filter(
+            Player.fifa_id != fifa_id,
+            Player.is_active == True,
+            Player.overall >= max(40, (target.overall or 70) - 12),
+            Player.overall <= min(99, (target.overall or 70) + 12)
+        ).limit(120).all()
+        
+        scored = []
+        for p in candidates:
+            pace_diff = (p.pace or 70) - (target.pace or 70)
+            shoot_diff = (p.shooting or 70) - (target.shooting or 70)
+            pass_diff = (p.passing or 70) - (target.passing or 70)
+            drib_diff = (p.dribbling or 70) - (target.dribbling or 70)
+            def_diff = (p.defending or 70) - (target.defending or 70)
+            phys_diff = (p.physical or 70) - (target.physical or 70)
+            ovr_diff = (p.overall or 70) - (target.overall or 70)
+            
+            dist = (pace_diff**2 + shoot_diff**2 + pass_diff**2 + drib_diff**2 + def_diff**2 + phys_diff**2 + ovr_diff**2 * 2) ** 0.5
+            sim_score = max(50.0, round(100.0 - (dist * 0.8), 1))
+            
+            scored.append({
+                "fifa_id": p.fifa_id,
+                "name": p.name,
+                "overall": p.overall,
+                "position": p.position,
+                "club": p.club,
+                "similarity_score": sim_score,
+                "age": p.age,
+                "potential": p.potential,
+                "preferred_foot": p.preferred_foot,
+                "value_eur": p.value_eur,
+                "wage_eur": p.wage_eur,
+                "nationality": p.nationality,
+                "face_url": p.face_url,
+                "club_logo": p.club_logo,
+                "nation_flag": p.nation_flag
+            })
+            
+        scored.sort(key=lambda x: x["similarity_score"], reverse=True)
+        return scored[:k]
+
     def get_similar_players(self, db: Session, fifa_id: int, k: int = 5):
+        is_render = os.environ.get("RENDER", "").lower() in ("true", "1", "yes")
+        if is_render or os.environ.get("USE_DB_SIMILARITY") == "true":
+            return self._get_db_fallback_similar_players(db=db, fifa_id=fifa_id, k=k)
+
         try:
             df, knn = self._get_similarity_model()
         except Exception as e:
-            print(f"[AIService Warning] Could not load similarity model: {e}")
-            return None
+            print(f"[AIService Warning] Could not load similarity model: {e}. Using DB fallback.")
+            return self._get_db_fallback_similar_players(db=db, fifa_id=fifa_id, k=k)
 
         target_row = df[df['player_id'] == fifa_id]
         if target_row.empty:
-            return None
+            return self._get_db_fallback_similar_players(db=db, fifa_id=fifa_id, k=k)
             
         target_idx = target_row.index[0]
         feature_cols = [c for c in df.columns if c not in ['snapshot_id', 'player_id']]
@@ -634,7 +712,7 @@ class AIService:
                 break
 
         if not candidate_ids:
-            return []
+            return self._get_db_fallback_similar_players(db=db, fifa_id=fifa_id, k=k)
 
         # Batch query all candidate players in ONE query to prevent N+1 performance issues
         db_players = db.query(Player).filter(Player.fifa_id.in_(candidate_ids)).all()
@@ -666,7 +744,7 @@ class AIService:
                 if len(similar_players) >= k:
                     break
                 
-        return similar_players
+        return similar_players or self._get_db_fallback_similar_players(db=db, fifa_id=fifa_id, k=k)
 
     def get_top_hidden_gems(
         self,
@@ -742,6 +820,10 @@ class AIService:
             matching_ids = {r[0] for r in query.all()}
             if not matching_ids:
                 return []
+
+        is_render = os.environ.get("RENDER", "").lower() in ("true", "1", "yes")
+        if is_render or os.environ.get("USE_DB_HIDDEN_GEMS") == "true":
+            return self._get_db_fallback_hidden_gems(db=db, limit=limit, matching_ids=matching_ids)
 
         try:
             df = self._get_hidden_gems_data()
