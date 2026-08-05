@@ -35,12 +35,12 @@ class WatchlistService:
             raise ValueError("User not found.")
 
         # ---------------------------------------
-        # Check player exists
+        # Check player exists (accepts fifa_id or internal id)
         # ---------------------------------------
 
         player = (
             db.query(Player)
-            .filter(Player.fifa_id == player_id)
+            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
             .first()
         )
 
@@ -55,7 +55,7 @@ class WatchlistService:
             db.query(Watchlist)
             .filter(
                 Watchlist.user_id == user_id,
-                Watchlist.player_id == player_id
+                Watchlist.player_id == player.id
             )
             .first()
         )
@@ -66,12 +66,12 @@ class WatchlistService:
             )
 
         # ---------------------------------------
-        # Create watchlist entry
+        # Create watchlist entry (storing players.id)
         # ---------------------------------------
 
         watchlist_item = Watchlist(
             user_id=user_id,
-            player_id=player.fifa_id,
+            player_id=player.id,
             notes=notes
         )
 
@@ -86,7 +86,8 @@ class WatchlistService:
             "player": player.name,
             "watchlist_id": watchlist_item.id
         }
-        # =====================================================
+
+    # =====================================================
     # Get User Watchlist
     # =====================================================
 
@@ -131,7 +132,7 @@ class WatchlistService:
             player = (
                 db.query(Player)
                 .filter(
-                    Player.fifa_id == item.player_id
+                    (Player.id == item.player_id) | (Player.fifa_id == item.player_id)
                 )
                 .first()
             )
@@ -160,7 +161,8 @@ class WatchlistService:
             })
 
         return results
-        # =====================================================
+
+    # =====================================================
     # Update Watchlist Notes
     # =====================================================
 
@@ -172,6 +174,15 @@ class WatchlistService:
         notes: str
     ):
 
+        player = (
+            db.query(Player)
+            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
+            .first()
+        )
+
+        if not player:
+            raise ValueError("Player not found.")
+
         # ---------------------------------------
         # Find watchlist entry
         # ---------------------------------------
@@ -180,7 +191,7 @@ class WatchlistService:
             db.query(Watchlist)
             .filter(
                 Watchlist.user_id == user_id,
-                Watchlist.player_id == player_id
+                Watchlist.player_id.in_([player.id, player.fifa_id])
             )
             .first()
         )
@@ -215,6 +226,16 @@ class WatchlistService:
         player_id: int
     ):
 
+        player = (
+            db.query(Player)
+            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
+            .first()
+        )
+
+        target_ids = [player_id]
+        if player:
+            target_ids = [player.id, player.fifa_id]
+
         # ---------------------------------------
         # Find watchlist entry
         # ---------------------------------------
@@ -223,7 +244,7 @@ class WatchlistService:
             db.query(Watchlist)
             .filter(
                 Watchlist.user_id == user_id,
-                Watchlist.player_id == player_id
+                Watchlist.player_id.in_(target_ids)
             )
             .first()
         )
@@ -240,7 +261,8 @@ class WatchlistService:
         return {
             "message": "Player removed from watchlist successfully."
         }
-        # =====================================================
+
+    # =====================================================
     # Clear Watchlist
     # =====================================================
 
@@ -292,11 +314,21 @@ class WatchlistService:
         player_id: int
     ):
 
+        player = (
+            db.query(Player)
+            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
+            .first()
+        )
+
+        target_ids = [player_id]
+        if player:
+            target_ids = [player.id, player.fifa_id]
+
         watchlist_item = (
             db.query(Watchlist)
             .filter(
                 Watchlist.user_id == user_id,
-                Watchlist.player_id == player_id
+                Watchlist.player_id.in_(target_ids)
             )
             .first()
         )
@@ -306,4 +338,5 @@ class WatchlistService:
             "player_id": player_id,
             "watchlisted": watchlist_item is not None
         }
+
     
