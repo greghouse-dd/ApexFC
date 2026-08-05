@@ -36,6 +36,9 @@ def migrate():
     print(f"Found tables to migrate: {tables}")
 
     from sqlalchemy import text
+    from app.database.database import Base
+    from app.models import User, Player, Squad, SquadPlayer, TransferHistory, Watchlist
+
     print(f"Dropping existing tables with CASCADE to reset foreign key constraints...")
     with target_engine.begin() as conn:
         for t in ["squad_players", "transfer_history", "watchlists", "squads", "fifa_players", "users", "players"]:
@@ -44,14 +47,31 @@ def migrate():
             except Exception as e:
                 print(f"Notice: drop table {t}: {e}")
 
+    print("Re-creating clean database schema with correct PostgreSQL data types...")
+    Base.metadata.create_all(bind=target_engine)
+
+    # Disable foreign key constraints during bulk data insertion
+    with target_engine.begin() as conn:
+        conn.execute(text("SET session_replication_role = 'replica';"))
+
     for table in tables:
         print(f"Migrating table '{table}'...")
         df = pd.read_sql_query(f"SELECT * FROM {table}", sqlite_conn)
         print(f"  - Loaded {len(df)} rows.")
-        df.to_sql(table, con=target_engine, if_exists="replace", index=False, chunksize=1000)
+
+        # Cast boolean columns to native boolean for PostgreSQL compatibility
+        for bool_col in ["is_active", "is_admin"]:
+            if bool_col in df.columns:
+                df[bool_col] = df[bool_col].astype(bool)
+
+        df.to_sql(table, con=target_engine, if_exists="append", index=False, chunksize=1000)
         print(f"  - Successfully written '{table}' to target database!")
 
-    print("\n✅ Migration complete! All data successfully migrated to Supabase.")
+    # Re-enable foreign key constraints
+    with target_engine.begin() as conn:
+        conn.execute(text("SET session_replication_role = 'origin';"))
+
+    print("\n[SUCCESS] Migration complete! All data successfully migrated to Supabase.")
 
 if __name__ == "__main__":
     migrate()
