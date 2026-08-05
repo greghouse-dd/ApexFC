@@ -450,6 +450,24 @@ class AIService:
 
     def _get_embeddings(self):
         if self._embeddings is None:
+            is_render = os.environ.get("RENDER", "").lower() in ("true", "1", "yes")
+            
+            # 1. Try FastEmbed (ONNX runtime, ~25MB RAM, no PyTorch)
+            try:
+                from langchain_community.embeddings import FastEmbedEmbeddings
+                print("[AIService] Using lightweight FastEmbed (ONNX, ~25MB RAM)...")
+                self._embeddings = FastEmbedEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+                return self._embeddings
+            except Exception:
+                pass
+
+            # 2. On Render, skip PyTorch HuggingFaceEmbeddings (~450MB RAM) to prevent 512MB OOM crash
+            if is_render or os.environ.get("DISABLE_HEAVY_EMBEDDINGS") == "true":
+                print("[AIService] Render environment detected. Bypassing PyTorch embeddings to keep memory <150MB.")
+                self._embeddings = None
+                return None
+
+            # 3. Local environment fallback to HuggingFaceEmbeddings
             try:
                 from langchain_community.embeddings import HuggingFaceEmbeddings
                 print("[AIService] Using BAAI/bge-small-en-v1.5 Embeddings matching vector DB index...")
@@ -459,19 +477,8 @@ class AIService:
                 )
             except Exception as e:
                 print(f"[AIService Warning] HuggingFaceEmbeddings initialization error: {e}")
-                api_key = os.environ.get("GOOGLE_API_KEY") or os.environ.get("GEMINI_API_KEY")
-                if api_key:
-                    try:
-                        from langchain_google_genai import GoogleGenerativeAIEmbeddings
-                        self._embeddings = GoogleGenerativeAIEmbeddings(
-                            model="models/gemini-embedding-001",
-                            google_api_key=api_key
-                        )
-                    except Exception as g_err:
-                        print(f"[AIService Error] Gemini embeddings fallback failed: {g_err}")
-                        self._embeddings = None
-                else:
-                    self._embeddings = None
+                self._embeddings = None
+
         return self._embeddings
 
     def _get_kb_index(self):
@@ -492,12 +499,26 @@ class AIService:
 
     def _get_bm25_retriever(self):
         if self._bm25_retriever is None:
+            docs = []
             kb = self._get_kb_index()
-            if not kb or not kb.db:
-                return None
-            docs = list(kb.db.docstore._dict.values())
-            from langchain_community.retrievers import BM25Retriever
-            self._bm25_retriever = BM25Retriever.from_documents(docs)
+            if kb and kb.db:
+                docs = list(kb.db.docstore._dict.values())
+            else:
+                # Direct lightweight document unpickling on Render (0 MB PyTorch RAM)
+                try:
+                    import pickle
+                    index_pkl_path = os.path.join(DB_DIR, "index.pkl")
+                    if os.path.exists(index_pkl_path):
+                        with open(index_pkl_path, "rb") as f:
+                            data = pickle.load(f)
+                            docs = list(data[0]._dict.values())
+                            print(f"[AIService] Loaded {len(docs)} documents directly from pickle for Render BM25 retrieval.")
+                except Exception as pkl_err:
+                    print(f"[AIService Warning] Failed loading docs from pickle for BM25: {pkl_err}")
+
+            if docs:
+                from langchain_community.retrievers import BM25Retriever
+                self._bm25_retriever = BM25Retriever.from_documents(docs)
         return self._bm25_retriever
 
     def _get_reranker(self):
