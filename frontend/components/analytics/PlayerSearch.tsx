@@ -75,8 +75,8 @@ export default function PlayerSearch() {
         <div className="absolute top-full mt-2 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-64 overflow-y-auto">
           {results.map((player) => (
             <div
-              key={player.fifa_id || player.id}
-              onClick={() => handleSelect(player.fifa_id || player.id)}
+              key={player.fifa_id}
+              onClick={() => handleSelect(player.fifa_id)}
               className="flex items-center gap-3 p-3 hover:bg-accent cursor-pointer transition-colors"
             >
               <img

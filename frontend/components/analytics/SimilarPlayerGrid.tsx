@@ -159,7 +159,7 @@ export default function SimilarPlayerGrid() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Link 
-              href={`/analytics?id=${targetPlayer.fifa_id || targetPlayer.id}`} 
+              href={`/analytics?id=${targetPlayer.fifa_id}`} 
               className="text-muted-foreground hover:text-primary transition-colors"
             >
               <ArrowLeft size={18} />

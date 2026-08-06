@@ -8,6 +8,7 @@ from app.models.squad_player import SquadPlayer
 from app.models.transfer_history import TransferHistory
 
 from app.services.squad_service import SquadService
+from app.services.player_service import resolve_player
 
 
 class TransferService:
@@ -41,11 +42,7 @@ class TransferService:
         # Check player exists
         # ---------------------------------------
 
-        player = (
-            db.query(Player)
-            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
-            .first()
-        )
+        player = resolve_player(db, player_id)
 
         if not player:
             raise ValueError("Player not found.")
@@ -209,11 +206,7 @@ class TransferService:
         # Fetch player details
         # ---------------------------------------
 
-        player = (
-            db.query(Player)
-            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
-            .first()
-        )
+        player = resolve_player(db, player_id)
 
         if not player:
             raise ValueError("Player not found.")
@@ -324,7 +317,7 @@ class TransferService:
             player = (
                 db.query(Player)
                 .filter(
-                    (Player.fifa_id == transfer.player_id) | (Player.id == transfer.player_id)
+                    Player.fifa_id == transfer.player_id
                 )
                 .first()
             )
@@ -355,7 +348,7 @@ class TransferService:
         player = (
             db.query(Player)
             .filter(
-                (Player.fifa_id == player_id) | (Player.id == player_id)
+                Player.fifa_id == player_id
             )
             .first()
         )
@@ -425,7 +418,7 @@ class TransferService:
             player = (
                 db.query(Player)
                 .filter(
-                    (Player.fifa_id == transfer.player_id) | (Player.id == transfer.player_id)
+                    Player.fifa_id == transfer.player_id
                 )
                 .first()
             )

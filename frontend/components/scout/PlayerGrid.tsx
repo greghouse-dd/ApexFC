@@ -69,7 +69,7 @@ export default function PlayerGrid() {
         });
         if (active) {
           const mapped = (response.data.players || []).map((p: any) => ({
-            id: p.fifa_id || p.id,
+            id: p.fifa_id,
             name: p.name,
             photo: p.face_url || DEFAULT_AVATAR,
             nationality: p.nationality,

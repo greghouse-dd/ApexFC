@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.models.player import Player
 from app.models.watchlist import Watchlist
+from app.services.player_service import resolve_player
 
 
 class WatchlistService:
@@ -38,11 +39,7 @@ class WatchlistService:
         # Check player exists (accepts fifa_id or internal id)
         # ---------------------------------------
 
-        player = (
-            db.query(Player)
-            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
-            .first()
-        )
+        player = resolve_player(db, player_id)
 
         if not player:
             raise ValueError("Player not found.")
@@ -55,7 +52,7 @@ class WatchlistService:
             db.query(Watchlist)
             .filter(
                 Watchlist.user_id == user_id,
-                Watchlist.player_id == player.id
+                Watchlist.player_id == player.fifa_id
             )
             .first()
         )
@@ -66,12 +63,12 @@ class WatchlistService:
             )
 
         # ---------------------------------------
-        # Create watchlist entry (storing players.id)
+        # Create watchlist entry (storing fifa_id)
         # ---------------------------------------
 
         watchlist_item = Watchlist(
             user_id=user_id,
-            player_id=player.id,
+            player_id=player.fifa_id,
             notes=notes
         )
 
@@ -131,9 +128,7 @@ class WatchlistService:
 
             player = (
                 db.query(Player)
-                .filter(
-                    (Player.id == item.player_id) | (Player.fifa_id == item.player_id)
-                )
+                .filter(Player.fifa_id == item.player_id)
                 .first()
             )
 
@@ -174,11 +169,7 @@ class WatchlistService:
         notes: str
     ):
 
-        player = (
-            db.query(Player)
-            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
-            .first()
-        )
+        player = resolve_player(db, player_id)
 
         if not player:
             raise ValueError("Player not found.")
@@ -191,7 +182,7 @@ class WatchlistService:
             db.query(Watchlist)
             .filter(
                 Watchlist.user_id == user_id,
-                Watchlist.player_id.in_([player.id, player.fifa_id])
+                Watchlist.player_id == player.fifa_id
             )
             .first()
         )
@@ -226,15 +217,11 @@ class WatchlistService:
         player_id: int
     ):
 
-        player = (
-            db.query(Player)
-            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
-            .first()
-        )
+        player = resolve_player(db, player_id)
 
         target_ids = [player_id]
         if player:
-            target_ids = [player.id, player.fifa_id]
+            target_ids = [player.fifa_id]
 
         # ---------------------------------------
         # Find watchlist entry
@@ -314,15 +301,11 @@ class WatchlistService:
         player_id: int
     ):
 
-        player = (
-            db.query(Player)
-            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
-            .first()
-        )
+        player = resolve_player(db, player_id)
 
         target_ids = [player_id]
         if player:
-            target_ids = [player.id, player.fifa_id]
+            target_ids = [player.fifa_id]
 
         watchlist_item = (
             db.query(Watchlist)

@@ -154,7 +154,7 @@ export default function AnalyticsLayout() {
     const checkWatchlistStatus = async () => {
       if (!user || !player) return;
       try {
-        const pid = player.fifa_id || player.id;
+        const pid = player.fifa_id;
         const res = await api.get(`/watchlist/check/${user.id}/${pid}`);
         setIsWatchlisted(res.data.watchlisted);
       } catch (err) {
@@ -169,7 +169,7 @@ export default function AnalyticsLayout() {
       toast.error("Please login to manage watchlist.");
       return;
     }
-    const pid = player.fifa_id || player.id;
+    const pid = player.fifa_id;
     try {
       if (isWatchlisted) {
         await api.delete(`/watchlist/${pid}`, { params: { user_id: user.id } });
@@ -323,7 +323,7 @@ export default function AnalyticsLayout() {
     }
     if (!player) return;
 
-    const pid = player.fifa_id || player.id;
+    const pid = player.fifa_id;
 
     try {
       // 1. Get user squad summary
@@ -476,7 +476,7 @@ export default function AnalyticsLayout() {
   const generateShotMapEvents = () => {
     if (!player) return [];
     
-    const id = player.fifa_id || player.id || 1;
+    const id = player.fifa_id || 1;
     const isGk = player.position?.split(",")[0].trim().toUpperCase() === "GK";
     
     // Seeded Random Generator (LCG)
@@ -535,7 +535,7 @@ export default function AnalyticsLayout() {
   const generateHeatmapPoints = () => {
     if (!player) return [];
     
-    const id = player.fifa_id || player.id || 1;
+    const id = player.fifa_id || 1;
     
     // Seeded Random Generator (LCG) - shifted to avoid exact overlap with shot map LCG sequence
     let s = (id + 500) % 2147483647;
@@ -829,7 +829,7 @@ export default function AnalyticsLayout() {
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl blur-sm opacity-60 group-hover:opacity-100 transition duration-300"></div>
                     <Button
                       className="relative flex-1 sm:flex-none h-16 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-lg px-10 rounded-xl flex items-center justify-center gap-3 border-0 shadow-xl transition-all duration-300 hover:scale-[1.02]"
-                      onClick={() => router.push(`/analytics/similar?id=${player.fifa_id || player.id}`)}
+                      onClick={() => router.push(`/analytics/similar?id=${player.fifa_id}`)}
                     >
                       Find Similar Players
                       <span className="text-[10px] bg-black/45 text-emerald-200 px-2.5 py-1 rounded-full font-extrabold tracking-wider uppercase">
@@ -1139,9 +1139,9 @@ export default function AnalyticsLayout() {
                 <div className="absolute top-full mt-2 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto z-50 text-left">
                   {statsResults.map((p) => (
                     <div
-                      key={p.fifa_id || p.id}
+                      key={p.fifa_id}
                       onClick={() => {
-                        router.push(`/analytics?id=${p.fifa_id || p.id}`);
+                        router.push(`/analytics?id=${p.fifa_id}`);
                         setShowStatsDropdown(false);
                         setStatsQuery("");
                       }}
@@ -1198,7 +1198,7 @@ export default function AnalyticsLayout() {
                     size="sm"
                     className="w-full mt-2 font-semibold border-primary/30 hover:border-primary transition-colors cursor-pointer"
                     onClick={() => {
-                      router.push(`/analytics?id=${compareSource.fifa_id || compareSource.id}`);
+                      router.push(`/analytics?id=${compareSource.fifa_id}`);
                       setMode("stats");
                     }}
                   >
@@ -1231,8 +1231,8 @@ export default function AnalyticsLayout() {
                       <div className="absolute top-full mt-2 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto z-50 text-left">
                         {sourceResults.map((p) => (
                           <div
-                            key={p.fifa_id || p.id}
-                            onClick={() => handleSelectSourcePlayer(p.fifa_id || p.id)}
+                            key={p.fifa_id}
+                            onClick={() => handleSelectSourcePlayer(p.fifa_id)}
                             className="flex items-center justify-between p-2.5 hover:bg-accent cursor-pointer text-xs"
                           >
                             <div>
@@ -1362,7 +1362,7 @@ export default function AnalyticsLayout() {
                     size="sm"
                     className="w-full mt-2 font-semibold border-indigo-500/30 hover:border-indigo-500 transition-colors cursor-pointer"
                     onClick={() => {
-                      router.push(`/analytics?id=${comparePlayer.fifa_id || comparePlayer.id}`);
+                      router.push(`/analytics?id=${comparePlayer.fifa_id}`);
                       setMode("stats");
                     }}
                   >
@@ -1394,8 +1394,8 @@ export default function AnalyticsLayout() {
                       <div className="absolute top-full mt-2 w-full bg-card border border-border rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto z-50 text-left">
                         {compareResults.map((p) => (
                           <div
-                            key={p.fifa_id || p.id}
-                            onClick={() => handleSelectComparePlayer(p.fifa_id || p.id)}
+                            key={p.fifa_id}
+                            onClick={() => handleSelectComparePlayer(p.fifa_id)}
                             className="flex items-center justify-between p-2.5 hover:bg-accent cursor-pointer text-xs"
                           >
                             <div>

@@ -5,6 +5,18 @@ from sqlalchemy import func, text, or_
 
 from app.models.player import Player
 
+
+def resolve_player(db: Session, player_id: int) -> Player | None:
+    """
+    Canonical player lookup: always prioritises fifa_id over the
+    auto-increment primary key so that IDs that exist in both
+    columns never resolve to the wrong row.
+    """
+    player = db.query(Player).filter(Player.fifa_id == player_id).first()
+    if player is None:
+        player = db.query(Player).filter(Player.id == player_id).first()
+    return player
+
 def get_db_attributes(db: Session, name: str, full_name: str, overall: int, shooting: int, passing: int, pace: int, dribbling: int, defending: int, physical: int, p_id: int):
     # Default fallback generation helper
     def generate_fallback():
@@ -264,11 +276,7 @@ class PlayerService:
         db: Session,
         player_id: int
     ):
-        player = (
-            db.query(Player)
-            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
-            .first()
-        )
+        player = resolve_player(db, player_id)
 
         if player is None:
             raise HTTPException(

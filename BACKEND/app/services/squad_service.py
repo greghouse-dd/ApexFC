@@ -9,6 +9,7 @@ from app.models.player import Player
 from app.models.squad import Squad
 from app.models.squad_player import SquadPlayer
 from app.models.watchlist import Watchlist
+from app.services.player_service import resolve_player
 
 
 class SquadService:
@@ -179,21 +180,17 @@ class SquadService:
         if not squad:
             raise ValueError("Squad not found.")
 
-        player = (
-            db.query(Player)
-            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
-            .first()
-        )
+        player = resolve_player(db, player_id)
 
         if not player:
             raise ValueError("Player not found.")
 
-        # Prevent duplicate players (checking both player.id and fifa_id)
+        # Prevent duplicate players (checking by fifa_id)
         existing = (
             db.query(SquadPlayer)
             .filter(
                 SquadPlayer.squad_id == squad_id,
-                SquadPlayer.player_id.in_([player.id, player.fifa_id])
+                SquadPlayer.player_id == player.fifa_id
             )
             .first()
         )
@@ -229,7 +226,7 @@ class SquadService:
         squad_player = SquadPlayer(
             id=next_sp_id,
             squad_id=squad_id,
-            player_id=player.id,  # Save player.id (primary key referencing players.id foreign key)
+            player_id=player.fifa_id,  # Store fifa_id as canonical identifier
             purchase_price=player.value_eur,
             current_value=player.value_eur,
             position=position,
@@ -245,7 +242,7 @@ class SquadService:
             db.query(Watchlist)
             .filter(
                 Watchlist.user_id == squad.user_id,
-                Watchlist.player_id.in_([player.id, player.fifa_id])
+                Watchlist.player_id == player.fifa_id
             )
             .first()
         )
@@ -267,14 +264,10 @@ class SquadService:
         player_id: int
     ):
 
-        player = (
-            db.query(Player)
-            .filter((Player.fifa_id == player_id) | (Player.id == player_id))
-            .first()
-        )
+        player = resolve_player(db, player_id)
         target_ids = [player_id]
         if player:
-            target_ids = [player.id, player.fifa_id]
+            target_ids = [player.fifa_id]
 
         squad_player = (
             db.query(SquadPlayer)
@@ -644,7 +637,7 @@ class SquadService:
             player = (
                 db.query(Player)
                 .filter(
-                    (Player.id == squad_player.player_id) | (Player.fifa_id == squad_player.player_id)
+                    Player.fifa_id == squad_player.player_id
                 )
                 .first()
             )
@@ -688,7 +681,7 @@ class SquadService:
             player = (
                 db.query(Player)
                 .filter(
-                    (Player.id == squad_player.player_id) | (Player.fifa_id == squad_player.player_id)
+                    Player.fifa_id == squad_player.player_id
                 )
                 .first()
             )

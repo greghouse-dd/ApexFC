@@ -243,7 +243,7 @@ export default function SquadPage() {
             const res = await api.get(`/players/${p.player_id}`);
             const backend = res.data;
             profiles[p.player_id] = {
-              id: backend.fifa_id || backend.id,
+              id: backend.fifa_id,
               name: backend.name,
               photo: backend.face_url || backend.photo || "",
               nationality: backend.nationality || "",
@@ -360,7 +360,7 @@ export default function SquadPage() {
 
       // 2. Add player to squad
       await api.post(`/squads/${squad.id}/players`, {
-        player_id: player.fifa_id || player.id,
+        player_id: player.fifa_id,
         position: targetPosString
       });
 
