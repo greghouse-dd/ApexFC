@@ -220,13 +220,24 @@ export default function SquadPage() {
       const listRes = await api.get("/squads/", { params: { user_id: userId } });
       let activeSquad = listRes.data?.[0];
 
-      // 2. If no squad exists, create a default squad
+      // 2. If no squad exists, create a default squad with a unique name
       if (!activeSquad) {
-        const createRes = await api.post(`/squads/?user_id=${userId}`, {
-          squad_name: "First Team",
-          formation: "4-4-2"
-        });
-        activeSquad = createRes.data;
+        const defaultName = user ? `${user.username}'s FC` : "My Team";
+        try {
+          const createRes = await api.post(`/squads/?user_id=${userId}`, {
+            squad_name: defaultName,
+            formation: "4-4-2"
+          });
+          activeSquad = createRes.data;
+        } catch (createErr: any) {
+          // If name collision, retry with a timestamp suffix
+          const fallbackName = `Team ${Date.now().toString(36)}`;
+          const createRes = await api.post(`/squads/?user_id=${userId}`, {
+            squad_name: fallbackName,
+            formation: "4-4-2"
+          });
+          activeSquad = createRes.data;
+        }
       }
 
       // 3. Load full squad details

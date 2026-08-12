@@ -330,13 +330,24 @@ export default function AnalyticsLayout() {
       const listRes = await api.get("/squads/", { params: { user_id: user.id } });
       let squadSummary = listRes.data?.[0];
 
-      // Create default squad if none exists
+      // Create default squad if none exists — use a unique name per user
       if (!squadSummary) {
-        const createRes = await api.post(`/squads/?user_id=${user.id}`, {
-          squad_name: "First Team",
-          formation: "4-4-2"
-        });
-        squadSummary = createRes.data;
+        const defaultName = `${user.username}'s FC`;
+        try {
+          const createRes = await api.post(`/squads/?user_id=${user.id}`, {
+            squad_name: defaultName,
+            formation: "4-4-2"
+          });
+          squadSummary = createRes.data;
+        } catch (createErr: any) {
+          // If name collision, retry with a timestamp suffix
+          const fallbackName = `Team ${Date.now().toString(36)}`;
+          const createRes = await api.post(`/squads/?user_id=${user.id}`, {
+            squad_name: fallbackName,
+            formation: "4-4-2"
+          });
+          squadSummary = createRes.data;
+        }
       }
 
       // 1b. Fetch detailed squad to populate players list

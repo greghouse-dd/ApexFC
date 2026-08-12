@@ -91,19 +91,31 @@ export default function SettingsPage() {
 
   // Fetch squad configuration on load
   const fetchSquadDetails = async () => {
-    if (!user) return;
+    if (!user || !user.id) return;
     try {
       setLoading(true);
       const res = await api.get("/squads/", { params: { user_id: user.id } });
       let activeSquad = res.data?.[0];
 
-      // Auto-create squad if user has none
+      // Auto-create squad if user has none — use a unique name derived from the username
+      // to avoid the global uniqueness constraint on squad_name
       if (!activeSquad) {
-        const createRes = await api.post(`/squads/?user_id=${user.id}`, {
-          squad_name: "ApexFC",
-          formation: "4-3-3"
-        });
-        activeSquad = createRes.data;
+        const defaultName = `${user.username}'s FC`;
+        try {
+          const createRes = await api.post(`/squads/?user_id=${user.id}`, {
+            squad_name: defaultName,
+            formation: "4-3-3"
+          });
+          activeSquad = createRes.data;
+        } catch (createErr: any) {
+          // If name collision still happens, try with a timestamp suffix
+          const fallbackName = `${user.username} FC ${Date.now().toString(36)}`;
+          const createRes = await api.post(`/squads/?user_id=${user.id}`, {
+            squad_name: fallbackName,
+            formation: "4-3-3"
+          });
+          activeSquad = createRes.data;
+        }
       }
 
       // Fetch squad summary for accurate values
@@ -112,7 +124,7 @@ export default function SettingsPage() {
       setSquad(details);
 
       // Set page state from API values
-      setSquadName(details.squad_name || "ApexFC");
+      setSquadName(details.squad_name || "My Club");
       setFormation(details.formation || "4-3-3");
 
       // Total budget = remaining budget + squad value
@@ -144,7 +156,9 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
-    fetchSquadDetails();
+    if (user?.id) {
+      fetchSquadDetails();
+    }
   }, [user]);
 
   // Handle budget updates & warning checks
